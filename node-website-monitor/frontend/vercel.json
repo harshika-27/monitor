@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://monitoring-main-main1.onrender.com/api/:path*"
+      "destination": "https://monitor-hg6i.onrender.com/api/:path*"
     },
     {
       "source": "/(.*)",
