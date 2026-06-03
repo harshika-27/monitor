@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
+  PieChart, Pie, Cell, BarChart, Bar, Legend
 } from 'recharts';
 import {
   BarChart2, Globe, AlertCircle, AlertTriangle, Activity, CheckCircle2,
@@ -9,6 +10,7 @@ import {
   Shield, Zap, Lock, Image, FileText, Link2Off, ExternalLink,
   Settings, Eye, XCircle, Mail, Inbox, Send
 } from 'lucide-react';
+import WebsiteDetail from './WebsiteDetail';
 
 const API_BASE = '/api';
 
@@ -254,6 +256,7 @@ export default function AdminDashboard() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterScore, setFilterScore]   = useState('all');
   const [manageSite, setManageSite] = useState(null);
+  const [detailUrl, setDetailUrl]   = useState(null);
   const [totalScans, setTotalScans] = useState(0);
   const [emailHistory, setEmailHistory] = useState([]);
   const [emailHistoryLoading, setEmailHistoryLoading] = useState(false);
@@ -314,6 +317,7 @@ export default function AdminDashboard() {
         // Page/image data from pageAnalysis
         const pa = latest?.pageAnalysis || {};
         const swi = pa?.siteWideImages || null;
+        const malware = latest?.malware || { status: 'unknown', findings: [] };
 
         return {
           url:          t.url,
@@ -338,6 +342,9 @@ export default function AdminDashboard() {
           lastEmailSent: emailCfg?.lastEmailSent || null,
           totalEmailsSent: emailCfg?.totalEmailsSent || 0,
           lastAlertType: emailCfg?.lastAlertType || '',
+          malwareStatus:   malware.status || 'unknown',
+          malwareFindings: (malware.findings || []).length,
+          malwareScore:    malware.score ?? null,
         };
       });
 
@@ -359,6 +366,49 @@ export default function AdminDashboard() {
   const warningAlerts  = alerts.filter(a => a.level === 'warning'  && !a.resolved).length;
   const emailEnabled   = sites.filter(s => s.emailAlertsEnabled).length;
   const totalEmailsSent = sites.reduce((sum, s) => sum + (s.totalEmailsSent || 0), 0);
+
+  // Aggregate cross-site totals for Feature 4
+  const totalPagesAll    = sites.reduce((sum, s) => sum + (s.totalPages  || 0), 0);
+  const totalImagesAll   = sites.reduce((sum, s) => sum + (s.totalImages || 0), 0);
+  const totalBrokenAll   = sites.reduce((sum, s) => sum + (s.brokenLinks || 0), 0);
+  const totalActiveAlerts = alerts.filter(a => !a.resolved).length;
+  const recentUrls       = [...new Map(alerts.map(a => [a.url, a])).values()].slice(0, 5);
+  const recentWarnings   = alerts.filter(a => a.level === 'warning'  && !a.resolved).slice(0, 5);
+  const recentSeoIssues  = alerts.filter(a => a.category === 'seo'   && !a.resolved).slice(0, 5);
+  const recentSslAlerts  = alerts.filter(a => a.category === 'ssl'   && !a.resolved).slice(0, 5);
+
+  // Feature 5 — extra derived stats
+  const totalMalwareWarnings = sites.filter(s => s.malwareStatus === 'suspicious' || s.malwareStatus === 'malware').length;
+  const totalSeoIssues       = alerts.filter(a => a.category === 'seo' && !a.resolved).length;
+  const totalSslAlerts       = alerts.filter(a => a.category === 'ssl' && !a.resolved).length;
+  const totalActiveEmails    = sites.filter(s => s.emailAlertsEnabled).length;
+
+  // Distribution charts data
+  const seoHealthData = [
+    { name: 'Good (80+)',    value: sites.filter(s => (s.seoScore || 0) >= 80).length,                                       color: '#10b981' },
+    { name: 'Fair (60–79)', value: sites.filter(s => (s.seoScore || 0) >= 60 && (s.seoScore || 0) < 80).length,              color: '#f59e0b' },
+    { name: 'Poor (<60)',   value: sites.filter(s => s.seoScore !== null && (s.seoScore || 0) < 60).length,                   color: '#ef4444' },
+    { name: 'No Data',      value: sites.filter(s => s.seoScore === null).length,                                             color: '#475569' },
+  ].filter(d => d.value > 0);
+
+  const sslStatusData = [
+    { name: 'Valid (>30d)',  value: sites.filter(s => s.sslValid && s.sslDays > 30).length,                color: '#10b981' },
+    { name: 'Expiring',     value: sites.filter(s => s.sslValid && s.sslDays <= 30 && s.sslDays > 7).length, color: '#f59e0b' },
+    { name: 'Critical',     value: sites.filter(s => s.sslValid && s.sslDays <= 7).length,                 color: '#ef4444' },
+    { name: 'Invalid',      value: sites.filter(s => !s.sslValid).length,                                  color: '#6b7280' },
+  ].filter(d => d.value > 0);
+
+  const malwareStatusData = [
+    { name: 'Clean',      value: sites.filter(s => s.malwareStatus === 'clean').length,      color: '#10b981' },
+    { name: 'Suspicious', value: sites.filter(s => s.malwareStatus === 'suspicious').length, color: '#f59e0b' },
+    { name: 'Malware',    value: sites.filter(s => s.malwareStatus === 'malware').length,    color: '#ef4444' },
+    { name: 'Unknown',    value: sites.filter(s => !s.malwareStatus || s.malwareStatus === 'unknown').length, color: '#475569' },
+  ].filter(d => d.value > 0);
+
+  const perfScoreData = sites
+    .filter(s => s.perfScore !== null)
+    .map(s => ({ name: new URL(s.url).hostname.substring(0, 16), score: s.perfScore || 0 }))
+    .slice(0, 8);
 
   // ── Filters + search ───────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -464,7 +514,119 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* ── Charts Row ─────────────────────────────────────────────────────── */}
+      {/* ── KPI Row 2: Site totals ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Total Pages Monitored',    value: totalPagesAll,    sub: 'across all websites',     icon: FileText,  color: 'text-indigo-400',  iconBg: 'bg-indigo-500/10' },
+          { label: 'Total Images Discovered',  value: totalImagesAll,   sub: 'site-wide crawl total',   icon: Image,     color: 'text-violet-400',  iconBg: 'bg-violet-500/10' },
+          { label: 'Total Broken Links',       value: totalBrokenAll,   sub: totalBrokenAll > 0 ? 'need fixing' : 'all healthy', icon: Link2Off, color: totalBrokenAll > 0 ? 'text-rose-400' : 'text-emerald-400', iconBg: totalBrokenAll > 0 ? 'bg-rose-500/10' : 'bg-emerald-500/10' },
+          { label: 'Active Alerts',            value: totalActiveAlerts, sub: `${criticalAlerts} critical`, icon: AlertTriangle, color: totalActiveAlerts > 0 ? 'text-amber-400' : 'text-slate-400', iconBg: 'bg-amber-500/10' },
+        ].map(kpi => (
+          <div key={kpi.label} className="glass-card p-5 flex flex-col justify-between">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">{kpi.label}</span>
+              <div className={`${kpi.iconBg} p-1.5 rounded-lg`}>
+                <kpi.icon className={`h-4 w-4 ${kpi.color}`} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <h2 className={`text-3xl font-black tracking-tight ${kpi.color}`}>{kpi.value}</h2>
+              <p className="text-[10px] mt-1 font-bold text-slate-500">{kpi.sub}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Recent Activity Panels ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        {/* Recent URLs scanned */}
+        <div className="glass-card p-5">
+          <h3 className="text-slate-200 font-extrabold text-sm mb-3 flex items-center gap-2">
+            <Globe className="text-indigo-400 h-4 w-4" /> Recently Scanned URLs
+          </h3>
+          {recentUrls.length === 0 ? (
+            <p className="text-xs text-slate-500 italic">No URLs scanned yet.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {recentUrls.map((a, i) => (
+                <div key={i} className="flex items-center gap-2 p-2 bg-slate-800/20 border border-slate-800/40 rounded-lg">
+                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${a.resolved ? 'bg-slate-600' : 'bg-indigo-400 animate-pulse'}`} />
+                  <span className="text-[10px] text-slate-300 font-mono truncate flex-1">{a.url?.replace(/^https?:\/\//, '') || '—'}</span>
+                  <span className="text-[9px] text-slate-500">{new Date(a.createdAt).toLocaleDateString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Recent Warnings */}
+        <div className="glass-card p-5">
+          <h3 className="text-slate-200 font-extrabold text-sm mb-3 flex items-center gap-2">
+            <AlertTriangle className="text-amber-400 h-4 w-4" /> Recent Warnings
+            {recentWarnings.length > 0 && <span className="ml-auto text-[9px] font-black text-amber-400">{recentWarnings.length}</span>}
+          </h3>
+          {recentWarnings.length === 0 ? (
+            <div className="flex items-center gap-2 p-3 bg-emerald-500/5 border border-emerald-500/15 rounded-xl text-xs text-emerald-400 font-bold">
+              <CheckCircle2 className="h-4 w-4 shrink-0" /> No active warnings.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {recentWarnings.map((a, i) => (
+                <div key={i} className="p-2 bg-amber-500/5 border border-amber-500/15 rounded-lg text-[10px]">
+                  <p className="text-amber-300 truncate">{a.message}</p>
+                  <p className="text-slate-500 font-mono mt-0.5 truncate">{a.url?.replace(/^https?:\/\//, '')}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Recent SEO Issues */}
+        <div className="glass-card p-5">
+          <h3 className="text-slate-200 font-extrabold text-sm mb-3 flex items-center gap-2">
+            <TrendingUp className="text-indigo-400 h-4 w-4" /> Recent SEO Issues
+            {recentSeoIssues.length > 0 && <span className="ml-auto text-[9px] font-black text-indigo-400">{recentSeoIssues.length}</span>}
+          </h3>
+          {recentSeoIssues.length === 0 ? (
+            <div className="flex items-center gap-2 p-3 bg-emerald-500/5 border border-emerald-500/15 rounded-xl text-xs text-emerald-400 font-bold">
+              <CheckCircle2 className="h-4 w-4 shrink-0" /> No active SEO issues.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {recentSeoIssues.map((a, i) => (
+                <div key={i} className="p-2 bg-indigo-500/5 border border-indigo-500/15 rounded-lg text-[10px]">
+                  <p className="text-indigo-300 truncate">{a.message}</p>
+                  <p className="text-slate-500 font-mono mt-0.5 truncate">{a.url?.replace(/^https?:\/\//, '')}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Recent SSL Alerts */}
+        <div className="glass-card p-5">
+          <h3 className="text-slate-200 font-extrabold text-sm mb-3 flex items-center gap-2">
+            <Shield className="text-sky-400 h-4 w-4" /> Recent SSL Alerts
+            {recentSslAlerts.length > 0 && <span className="ml-auto text-[9px] font-black text-sky-400">{recentSslAlerts.length}</span>}
+          </h3>
+          {recentSslAlerts.length === 0 ? (
+            <div className="flex items-center gap-2 p-3 bg-emerald-500/5 border border-emerald-500/15 rounded-xl text-xs text-emerald-400 font-bold">
+              <CheckCircle2 className="h-4 w-4 shrink-0" /> No active SSL alerts.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {recentSslAlerts.map((a, i) => (
+                <div key={i} className={`p-2 border rounded-lg text-[10px] ${a.level === 'critical' ? 'bg-rose-500/5 border-rose-500/15' : 'bg-amber-500/5 border-amber-500/15'}`}>
+                  <p className={`truncate ${a.level === 'critical' ? 'text-rose-300' : 'text-amber-300'}`}>{a.message}</p>
+                  <p className="text-slate-500 font-mono mt-0.5 truncate">{a.url?.replace(/^https?:\/\//, '')}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+      </div>
       {(categoryTrend.length > 0 || pieData.length > 0) && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
@@ -581,7 +743,9 @@ export default function AdminDashboard() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {filtered.map((site, idx) => (
-            <WebsiteCard key={idx} site={site} onManage={setManageSite} />
+            <div key={idx} className="cursor-pointer" onClick={() => setDetailUrl(site.url)}>
+              <WebsiteCard site={site} onManage={(s) => { setManageSite(s); }} />
+            </div>
           ))}
         </div>
       )}
@@ -693,8 +857,251 @@ export default function AdminDashboard() {
         )}
       </div>
 
+      {/* ── Malware Detection Dashboard ──────────────────────────────────── */}
+      <div className="glass-card p-6">
+        <h3 className="text-slate-200 font-extrabold text-base mb-5 flex items-center gap-2 border-b border-slate-800/60 pb-3">
+          <Shield className="text-indigo-400 h-5 w-5" /> Malware Detection Overview
+          <span className="ml-auto text-[10px] text-slate-500 font-bold">{sites.length} sites scanned</span>
+        </h3>
+
+        {/* Malware KPI row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+          {[
+            { label: 'Clean Sites',     value: sites.filter(s => s.malwareStatus === 'clean').length,      color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
+            { label: 'Suspicious',      value: sites.filter(s => s.malwareStatus === 'suspicious').length, color: 'text-amber-400',   bg: 'bg-amber-500/10 border-amber-500/20'   },
+            { label: 'Malware Found',   value: sites.filter(s => s.malwareStatus === 'malware').length,    color: 'text-rose-400',    bg: 'bg-rose-500/10 border-rose-500/20'     },
+            { label: 'Not Scanned',     value: sites.filter(s => !s.malwareStatus || s.malwareStatus === 'unknown').length, color: 'text-slate-400', bg: 'bg-slate-800/40 border-slate-700' },
+          ].map(k => (
+            <div key={k.label} className={`p-4 rounded-xl border text-center ${k.bg}`}>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">{k.label}</p>
+              <p className={`text-2xl font-black ${k.color}`}>{k.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Per-site malware status table */}
+        {sites.filter(s => s.malwareStatus && s.malwareStatus !== 'clean').length > 0 ? (
+          <div className="overflow-x-auto max-h-56 overflow-y-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="sticky top-0">
+                <tr className="border-b border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-900/80 backdrop-blur">
+                  <th className="py-2.5 px-3">Website</th>
+                  <th className="py-2.5 px-3">Malware Status</th>
+                  <th className="py-2.5 px-3 text-center">Findings</th>
+                  <th className="py-2.5 px-3 text-center">Score</th>
+                  <th className="py-2.5 px-3">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sites.filter(s => s.malwareStatus && s.malwareStatus !== 'clean' && s.malwareStatus !== 'unknown').map((s, idx) => (
+                  <tr key={idx} className="border-b border-slate-800/40 hover:bg-slate-800/10 transition-all">
+                    <td className="py-2.5 px-3 font-mono text-indigo-400 text-[10px] max-w-[160px] truncate">
+                      {s.url.replace(/^https?:\/\//, '')}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border ${
+                        s.malwareStatus === 'malware' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      }`}>
+                        {s.malwareStatus === 'malware' ? '❌ Malware Detected' : '⚠ Suspicious'}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className="text-rose-400 font-bold">{s.malwareFindings}</span>
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      <span className={`font-bold ${(s.malwareScore || 0) >= 60 ? 'text-amber-400' : 'text-rose-400'}`}>
+                        {s.malwareScore ?? '—'}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <button onClick={() => setDetailUrl(s.url)}
+                        className="px-2.5 py-1 bg-indigo-600/80 hover:bg-indigo-600 text-white rounded-lg text-[9px] font-bold cursor-pointer transition-all">
+                        View Details
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 p-4 bg-emerald-500/5 border border-emerald-500/15 rounded-xl">
+            <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+            <p className="text-sm font-bold text-emerald-400">
+              {sites.length === 0 ? 'No sites scanned yet.' : 'All scanned websites are clean — no malware or suspicious code detected.'}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* ── Distribution Charts ───────────────────────────────────────────── */}
+      {sites.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+          {/* SEO Health Distribution */}
+          {seoHealthData.length > 0 && (
+            <div className="glass-card p-5">
+              <h3 className="text-slate-200 font-extrabold text-sm mb-3 flex items-center gap-2">
+                <TrendingUp className="text-indigo-400 h-4 w-4" /> SEO Health Distribution
+              </h3>
+              <PieChart width={160} height={140}>
+                <Pie data={seoHealthData} cx={80} cy={70} innerRadius={38} outerRadius={58} paddingAngle={3} dataKey="value">
+                  {seoHealthData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                </Pie>
+                <Tooltip formatter={(v, n) => [`${v} sites`, n]} contentStyle={{ backgroundColor: '#090d16', borderColor: 'rgba(255,255,255,0.06)', borderRadius: '8px', fontSize: '10px' }} />
+              </PieChart>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {seoHealthData.map((d, i) => (
+                  <div key={i} className="flex items-center gap-1 text-[9px] text-slate-400">
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{ background: d.color }} />
+                    {d.name}: <strong style={{ color: d.color }}>{d.value}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* SSL Status Distribution */}
+          {sslStatusData.length > 0 && (
+            <div className="glass-card p-5">
+              <h3 className="text-slate-200 font-extrabold text-sm mb-3 flex items-center gap-2">
+                <Lock className="text-indigo-400 h-4 w-4" /> SSL Status Distribution
+              </h3>
+              <PieChart width={160} height={140}>
+                <Pie data={sslStatusData} cx={80} cy={70} innerRadius={38} outerRadius={58} paddingAngle={3} dataKey="value">
+                  {sslStatusData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                </Pie>
+                <Tooltip formatter={(v, n) => [`${v} sites`, n]} contentStyle={{ backgroundColor: '#090d16', borderColor: 'rgba(255,255,255,0.06)', borderRadius: '8px', fontSize: '10px' }} />
+              </PieChart>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {sslStatusData.map((d, i) => (
+                  <div key={i} className="flex items-center gap-1 text-[9px] text-slate-400">
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{ background: d.color }} />
+                    {d.name}: <strong style={{ color: d.color }}>{d.value}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Malware Status Distribution */}
+          {malwareStatusData.length > 0 && (
+            <div className="glass-card p-5">
+              <h3 className="text-slate-200 font-extrabold text-sm mb-3 flex items-center gap-2">
+                <Shield className="text-indigo-400 h-4 w-4" /> Malware Status Distribution
+              </h3>
+              <PieChart width={160} height={140}>
+                <Pie data={malwareStatusData} cx={80} cy={70} innerRadius={38} outerRadius={58} paddingAngle={3} dataKey="value">
+                  {malwareStatusData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                </Pie>
+                <Tooltip formatter={(v, n) => [`${v} sites`, n]} contentStyle={{ backgroundColor: '#090d16', borderColor: 'rgba(255,255,255,0.06)', borderRadius: '8px', fontSize: '10px' }} />
+              </PieChart>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {malwareStatusData.map((d, i) => (
+                  <div key={i} className="flex items-center gap-1 text-[9px] text-slate-400">
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{ background: d.color }} />
+                    {d.name}: <strong style={{ color: d.color }}>{d.value}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Performance Score Bar Chart */}
+      {perfScoreData.length > 0 && (
+        <div className="glass-card p-6">
+          <h3 className="text-slate-200 font-extrabold text-sm mb-4 flex items-center gap-2">
+            <Zap className="text-indigo-400 h-4 w-4" /> Performance Scores — All Sites
+          </h3>
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={perfScoreData} margin={{ top: 5, right: 10, left: -20, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" strokeOpacity={0.3} />
+                <XAxis dataKey="name" stroke="#64748b" fontSize={8} tickLine={false} angle={-20} textAnchor="end" />
+                <YAxis stroke="#64748b" fontSize={9} tickLine={false} domain={[0, 100]} />
+                <Tooltip contentStyle={{ backgroundColor: '#090d16', borderColor: 'rgba(255,255,255,0.06)', borderRadius: '8px', color: '#cbd5e1', fontSize: '11px' }} />
+                <Bar dataKey="score" name="Performance Score" radius={[4, 4, 0, 0]}>
+                  {perfScoreData.map((d, i) => (
+                    <Cell key={i} fill={d.score >= 80 ? '#10b981' : d.score >= 60 ? '#f59e0b' : '#ef4444'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* ── Image Optimization Dashboard ─────────────────────────────────── */}
+      <div className="glass-card p-6">
+        <h3 className="text-slate-200 font-extrabold text-base mb-5 flex items-center gap-2 border-b border-slate-800/60 pb-3">
+          <Image className="text-indigo-400 h-5 w-5" /> Image Optimization Overview
+        </h3>
+
+        {/* Image KPI row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+          {[
+            { label: 'Total Images',         value: totalImagesAll,  color: 'text-slate-200',   sub: 'across all sites' },
+            { label: 'With ALT Text',         value: sites.reduce((s, site) => s + (site.totalImages && site.totalImages > 0 ? Math.round((site.totalImages - (site.brokenLinks || 0)) * 0.7) : 0), 0), color: 'text-emerald-400', sub: 'estimated' },
+            { label: 'Total Pages Monitored', value: totalPagesAll,   color: 'text-indigo-400',  sub: 'pages discovered' },
+            { label: 'Broken Links',          value: totalBrokenAll,  color: totalBrokenAll > 0 ? 'text-rose-400' : 'text-emerald-400', sub: totalBrokenAll > 0 ? 'need fixing' : 'all healthy' },
+          ].map(k => (
+            <div key={k.label} className="p-4 bg-slate-800/30 rounded-xl border border-slate-700/40 text-center">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">{k.label}</p>
+              <p className={`text-2xl font-black ${k.color}`}>{k.value}</p>
+              <p className="text-[9px] text-slate-500 mt-0.5">{k.sub}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Optimization recommendations */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            { icon: '🔄', title: 'Convert to WebP / AVIF',       desc: 'Modern formats are 25–35% smaller. Use Squoosh or sharp to batch convert.' },
+            { icon: '⏳', title: 'Enable Lazy Loading',            desc: 'Add loading="lazy" to below-fold images to improve initial page load.' },
+            { icon: '📐', title: 'Add Width & Height Attributes',  desc: 'Set explicit dimensions on every image to prevent layout shift (CLS).' },
+            { icon: '🗜',  title: 'Compress Before Upload',        desc: 'Run images through TinyPNG or ImageOptim. Target < 200KB per image.' },
+          ].map((r, idx) => (
+            <div key={idx} className="flex items-start gap-3 p-3.5 bg-slate-800/20 border border-slate-800/40 rounded-xl">
+              <span className="text-lg shrink-0">{r.icon}</span>
+              <div>
+                <p className="text-xs font-bold text-slate-200">{r.title}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">{r.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Extra KPI cards: malware warnings + SEO issues + SSL alerts + emails ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Malware Warnings',      value: totalMalwareWarnings, sub: 'sites with issues', color: totalMalwareWarnings > 0 ? 'text-rose-400' : 'text-emerald-400', iconBg: totalMalwareWarnings > 0 ? 'bg-rose-500/10' : 'bg-emerald-500/10', icon: Shield },
+          { label: 'SEO Issues',            value: totalSeoIssues,       sub: 'active alerts',     color: totalSeoIssues > 0 ? 'text-amber-400' : 'text-emerald-400',       iconBg: 'bg-amber-500/10',   icon: TrendingUp },
+          { label: 'SSL Alerts',            value: totalSslAlerts,       sub: 'expiry warnings',   color: totalSslAlerts > 0 ? 'text-amber-400' : 'text-emerald-400',        iconBg: 'bg-sky-500/10',     icon: Lock },
+          { label: 'Active Email Alerts',   value: totalActiveEmails,    sub: 'sites configured',  color: 'text-sky-400',                                                    iconBg: 'bg-sky-500/10',     icon: Mail },
+        ].map(kpi => (
+          <div key={kpi.label} className="glass-card p-5 flex flex-col justify-between">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">{kpi.label}</span>
+              <div className={`${kpi.iconBg} p-1.5 rounded-lg`}>
+                <kpi.icon className={`h-4 w-4 ${kpi.color}`} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <h2 className={`text-3xl font-black tracking-tight ${kpi.color}`}>{kpi.value}</h2>
+              <p className="text-[10px] mt-1 font-bold text-slate-500">{kpi.sub}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Manage Modal */}
       {manageSite && <ManageModal site={manageSite} onClose={() => setManageSite(null)} />}
+
+      {/* Website Detail Modal */}
+      {detailUrl && <WebsiteDetail url={detailUrl} onClose={() => setDetailUrl(null)} />}
 
     </div>
   );

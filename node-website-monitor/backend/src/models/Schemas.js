@@ -20,6 +20,7 @@ const monitorHistorySchema = new mongoose.Schema({
   uiUxData: { type: String },
   securityData: { type: String },
   pageAnalysisData: { type: String },
+  malwareData: { type: String },
   checkedAt: { type: Date, default: Date.now }
 });
 

@@ -11,6 +11,8 @@ import SettingsPanel from './components/SettingsPanel';
 import SiteAnalysisDashboard from './components/SiteAnalysisDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import EmailAlertSettings from './components/EmailAlertSettings';
+import MalwareReport from './components/MalwareReport';
+import ImageOptimization from './components/ImageOptimization';
 
 const API_BASE = '/api';
 
@@ -28,6 +30,7 @@ export default function App() {
   const [auditLoading, setAuditLoading] = useState(false);
   const [crawlData, setCrawlData] = useState(null);
   const [crawlLoading, setCrawlLoading] = useState(false);
+  const [scanProgress, setScanProgress] = useState(null); // null = idle, object = scanning
 
   // Fetch unique audited SRE target list
   const fetchTargets = async () => {
@@ -110,39 +113,55 @@ export default function App() {
       return;
     }
 
-    // Normalize .in, .org, .com links before running scan
     let formattedUrl = url.trim();
     if (!/^https?:\/\//i.test(formattedUrl)) {
       formattedUrl = 'https://' + formattedUrl;
     }
 
     setAuditLoading(true);
-    showToast('Initiating concurrent SRE website scan...', 'info');
+
+    // Animated scan progress steps
+    const STEPS = [
+      { label: 'Discovering Pages',     pct: 8  },
+      { label: 'Crawling Website',       pct: 18 },
+      { label: 'Checking SEO',           pct: 32 },
+      { label: 'Checking SSL',           pct: 45 },
+      { label: 'Checking Performance',   pct: 58 },
+      { label: 'Checking Images',        pct: 68 },
+      { label: 'Checking Broken Links',  pct: 78 },
+      { label: 'Running Security Scan',  pct: 88 },
+      { label: 'Generating Report',      pct: 96 },
+    ];
+    let stepIdx = 0;
+    setScanProgress({ label: STEPS[0].label, pct: STEPS[0].pct });
+    const stepTimer = setInterval(() => {
+      stepIdx = Math.min(stepIdx + 1, STEPS.length - 1);
+      setScanProgress({ label: STEPS[stepIdx].label, pct: STEPS[stepIdx].pct });
+    }, 900);
 
     try {
       const response = await axios.post(`${API_BASE}/audit`, { url: formattedUrl });
+      clearInterval(stepTimer);
+      setScanProgress({ label: 'Scan Complete!', pct: 100 });
+
       if (response.data.success) {
+        setTimeout(() => setScanProgress(null), 1200);
         showToast('Site SRE audit scan completed successfully!', 'success');
-        // Synchronously update the React SRE state with fresh compiled stats
         if (response.data.stats) {
           setStats(response.data.stats);
         }
-        // Refresh target quick-switcher list
         fetchTargets();
 
-        // Kick off deep site crawl asynchronously — does not block the main scan
         setCrawlData(null);
         setCrawlLoading(true);
         axios.post(`${API_BASE}/crawl`, { url: formattedUrl })
-          .then(crawlResp => {
-            if (crawlResp.data.success) {
-              setCrawlData(crawlResp.data);
-            }
-          })
+          .then(crawlResp => { if (crawlResp.data.success) setCrawlData(crawlResp.data); })
           .catch(() => {})
           .finally(() => setCrawlLoading(false));
       }
     } catch (err) {
+      clearInterval(stepTimer);
+      setScanProgress(null);
       console.error(err);
       showToast(err.response?.data?.error || 'Scan execution failed.', 'error');
     } finally {
@@ -227,6 +246,7 @@ export default function App() {
     if (!stats.seoData) stats.seoData = stats.latestStatus?.seo;
     if (!stats.uiUxData) stats.uiUxData = stats.latestStatus?.uiUx;
     if (!stats.pageAnalysisData) stats.pageAnalysisData = stats.latestStatus?.pageAnalysis;
+    if (!stats.malwareData) stats.malwareData = stats.latestStatus?.malware;
   }
 
   return (
@@ -351,96 +371,29 @@ export default function App() {
 
         {/* Tab Module Switcher */}
         <div className="flex flex-wrap border-b border-slate-800/80 mb-6 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
-          <button
-            onClick={() => setActiveTab('uptime')}
-            className={`px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeTab === 'uptime'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-400 hover:text-slate-250'
+          {[
+            { id: 'uptime',        label: 'Uptime & Logs' },
+            { id: 'wordpress',     label: 'WordPress CMS' },
+            { id: 'ssl',           label: 'SSL & Security' },
+            { id: 'seo',           label: 'SEO Optimization' },
+            { id: 'accessibility', label: 'Accessibility' },
+            { id: 'site_analysis', label: 'Site Analysis' },
+            { id: 'email_alerts',  label: 'Email Alerts' },
+            { id: 'admin',         label: 'Admin Dashboard' },
+            { id: 'settings',      label: 'Gmail & Alerts' },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-5 py-3.5 font-bold text-sm uppercase tracking-wide border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === tab.id
+                  ? 'border-indigo-500 text-indigo-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
-          >
-            Uptime & Error Logs
-          </button>
-
-          <button
-            onClick={() => setActiveTab('wordpress')}
-            className={`px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeTab === 'wordpress'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-400 hover:text-slate-250'
-              }`}
-          >
-            WordPress CMS Diagnostics
-          </button>
-
-          <button
-            onClick={() => setActiveTab('ssl')}
-            className={`px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeTab === 'ssl'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-400 hover:text-slate-250'
-              }`}
-          >
-            SSL & Security
-          </button>
-
-          <button
-            onClick={() => setActiveTab('seo')}
-            className={`px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeTab === 'seo'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-400 hover:text-slate-250'
-              }`}
-          >
-            SEO Optimization
-          </button>
-
-          <button
-            onClick={() => setActiveTab('accessibility')}
-            className={`px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeTab === 'accessibility'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-400 hover:text-slate-250'
-              }`}
-          >
-            UI Consistency & Accessibility
-          </button>
-
-          <button
-            onClick={() => setActiveTab('site_analysis')}
-            className={`px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeTab === 'site_analysis'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-400 hover:text-slate-250'
-              }`}
-          >
-            Site Analysis
-          </button>
-
-          <button
-            onClick={() => setActiveTab('email_alerts')}
-            className={`px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeTab === 'email_alerts'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-400 hover:text-slate-250'
-              }`}
-          >
-            Email Alerts
-          </button>
-
-          <button
-            onClick={() => setActiveTab('admin')}
-            className={`px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeTab === 'admin'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-400 hover:text-slate-250'
-              }`}
-          >
-            Admin Dashboard
-          </button>
-
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeTab === 'settings'
-                ? 'border-indigo-500 text-indigo-400'
-                : 'border-transparent text-slate-400 hover:text-slate-250'
-              }`}
-          >
-            Gmail Alerts & Credentials
-          </button>
-
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {/* Dynamic tabs render panel */}
@@ -485,6 +438,12 @@ export default function App() {
                 crawlLoading={crawlLoading}
               />
             )}
+            {activeTab === 'malware' && (
+              <MalwareReport malwareData={stats?.malwareData} />
+            )}
+            {activeTab === 'images' && (
+              <ImageOptimization seoData={stats?.seoData} crawlData={crawlData} />
+            )}
           </div>
         ) : (
           <div className="py-24 text-center glass-card border-dashed border-slate-800 rounded-3xl max-w-3xl mx-auto my-8 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
@@ -526,6 +485,46 @@ export default function App() {
         </div>
 
       </main>
+
+      {/* Scan Progress Overlay */}
+      {scanProgress && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="glass-card rounded-2xl p-8 w-full max-w-sm mx-4 text-center shadow-2xl">
+            <div className="mb-5">
+              <div className="h-14 w-14 rounded-full bg-indigo-600/20 border-2 border-indigo-500 flex items-center justify-center mx-auto mb-3">
+                <RefreshCw className="h-7 w-7 text-indigo-400 rotate-infinite" />
+              </div>
+              <h3 className="text-slate-200 font-extrabold text-base">Scanning Website</h3>
+              <p className="text-xs text-slate-400 mt-1 truncate">{url}</p>
+            </div>
+
+            {/* Step label */}
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-ping" />
+              <span className="text-sm font-bold text-indigo-300">
+                🔍 {scanProgress.label}...
+              </span>
+            </div>
+
+            {/* Progress bar */}
+            <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden border border-slate-700 mb-2">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-indigo-400 transition-all duration-700 ease-out"
+                style={{ width: `${scanProgress.pct}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-slate-500 font-bold">
+              <span>0%</span>
+              <span className={`font-black ${scanProgress.pct === 100 ? 'text-emerald-400' : 'text-indigo-400'}`}>
+                {scanProgress.pct}%
+              </span>
+              <span>100%</span>
+            </div>
+
+            <p className="text-[10px] text-slate-600 mt-4 italic">Please wait — this usually takes 5–15 seconds</p>
+          </div>
+        </div>
+      )}
 
       {/* Floating SRE toast alert card overlay */}
       {toast && (

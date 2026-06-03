@@ -88,7 +88,7 @@ export default function WordPressDashboard({ wordpressData }) {
     { id: 'overview',    label: 'Core & Security',         icon: Shield,    badge: vulnerabilitiesList.length + conflictingList.length },
     { id: 'updates',     label: 'Updates & Plugins',       icon: Package,   badge: pluginsNeedingUpdate.length + themesNeedingUpdate.length },
     { id: 'debug',       label: 'Debug & Admin',           icon: Bug,       badge: wpDebugActive ? 1 : 0 },
-    { id: 'pages',       label: `Pages (${pagesCrawled.length})`, icon: Server, badge: 0 },
+    //{ id: 'pages',       label: `Pages (${pagesCrawled.length})`, icon: Server, badge: 0 },
     { id: 'database',    label: 'Database',                icon: Wrench,    badge: 0 },
     { id: 'forms',       label: `Forms (${formsAudited.length})`, icon: FileText, badge: 0 },
     { id: 'links',       label: `Broken Links (${brokenLinks.length})`, icon: Link2Off, badge: brokenLinks.length },
@@ -210,8 +210,8 @@ export default function WordPressDashboard({ wordpressData }) {
           <button key={tab.id} onClick={() => setActiveSubTab(tab.id)}
             className={`px-4 py-2 font-extrabold text-xs uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
               activeSubTab === tab.id
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-650/15'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                : 'text-blue-400 hover:text-blue-800 hover:bg-slate-800/40'
             }`}>
             <tab.icon className="h-3.5 w-3.5" />
             {tab.label}
@@ -231,10 +231,10 @@ export default function WordPressDashboard({ wordpressData }) {
             {/* XML-RPC */}
             <div className="glass-card p-6 flex flex-col justify-between">
               <div>
-                <h4 className="text-slate-200 font-extrabold text-sm flex items-center gap-2">
+                <h4 className="text-blue-600 font-extrabold text-sm flex items-center gap-2">
                   <Shield className="h-4 w-4 text-indigo-400" /> XML-RPC Protocol
                 </h4>
-                <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                <p className="text-xs text-blue-600 mt-2 leading-relaxed">
                   Probes xmlrpc.php gateway. If active, exposes the site to brute-force logins and DDoS amplification.
                 </p>
               </div>
@@ -251,7 +251,7 @@ export default function WordPressDashboard({ wordpressData }) {
             {/* User Enumeration */}
             <div className="glass-card p-6 flex flex-col justify-between">
               <div>
-                <h4 className="text-slate-200 font-extrabold text-sm flex items-center gap-2">
+                <h4 className="text-blue-600 font-extrabold text-sm flex items-center gap-2">
                   <Eye className="h-4 w-4 text-indigo-400" /> REST API User Enumeration
                 </h4>
                 <p className="text-xs text-slate-500 mt-2 leading-relaxed">
@@ -278,7 +278,7 @@ export default function WordPressDashboard({ wordpressData }) {
 
           {/* All Plugins & Themes table */}
           <div className="glass-card p-6">
-            <h3 className="text-slate-200 font-extrabold text-base mb-5 flex items-center gap-2">
+            <h3 className="text-blue-600 font-extrabold text-base mb-5 flex items-center gap-2">
               <Database className="text-indigo-400 h-5 w-5" /> Extension Modules Status
             </h3>
             <div className="overflow-x-auto">

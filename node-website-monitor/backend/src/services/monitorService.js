@@ -9,6 +9,7 @@ const { MonitorHistory, Alert } = require('../models/Schemas');
 const { analyzeSeo } = require('./seoService');
 const { analyzeUiUx } = require('./uiUxService');
 const { analyzePageStructure } = require('./pageAnalysisService');
+const { analyseMalware } = require('./malwareService');
 const { sendAlertEmail, sendAlertEmailToWebsite } = require('./emailService');
 
 /**
@@ -178,7 +179,8 @@ const checkWebsiteStatus = async (url) => {
     performanceData: "",
     uiUxData: "",
     securityData: "",
-    pageAnalysisData: ""
+    pageAnalysisData: "",
+    malwareData: ""
   };
 
   // 1. DNS Resolution Speed Audit
@@ -391,6 +393,19 @@ const checkWebsiteStatus = async (url) => {
   } catch (e) {}
   auditReport.pageAnalysisData = JSON.stringify(pageAnalysis);
 
+  // 10. Malware Detection
+  let malware = { status: 'clean', statusLabel: '✅ Clean', score: 100, findings: [], summary: 'No issues detected.' };
+  try {
+    malware = analyseMalware(htmlContent, url);
+    if (malware.status === 'malware') {
+      await Alert.create({ url, category: 'security', level: 'critical', message: `Malware Detected: ${malware.summary}` });
+      sendAlertEmailToWebsite(url, 'security', 'critical', `Malware Detected on ${url}: ${malware.summary}`);
+    } else if (malware.status === 'suspicious') {
+      await Alert.create({ url, category: 'security', level: 'warning', message: `Suspicious code detected: ${malware.summary}` });
+    }
+  } catch (e) {}
+  auditReport.malwareData = JSON.stringify(malware);
+
   // Fire per-website performance and security threshold alerts
   try {
     const parsedPerf = JSON.parse(auditReport.performanceData || '{}');
@@ -460,6 +475,7 @@ const compileStats = async (url) => {
     doc.uiUx = parseJsonSafe(doc.uiUxData);
     doc.security = parseJsonSafe(doc.securityData);
     doc.pageAnalysis = parseJsonSafe(doc.pageAnalysisData);
+    doc.malware = parseJsonSafe(doc.malwareData);
     return doc;
   };
 
