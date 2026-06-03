@@ -277,9 +277,18 @@ const crawlWebsite = async (startUrl, homepageHtml = '') => {
       }
 
       const pageLabel = pageUrl.replace(/^https?:\/\/[^/]+/, '') || '/';
+      // Extract title and meta description for SEO table
+      const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      const descMatch  = html.match(/<meta\s+[^>]*name=["']description["'][^>]*content=["']([^"']*)["']/i) ||
+                         html.match(/<meta\s+[^>]*content=["']([^"']*)["'][^>]*name=["']description["']/i);
+      const pageTitle   = titleMatch ? titleMatch[1].trim().substring(0, 120) : '';
+      const pageDesc    = descMatch  ? descMatch[1].trim().substring(0, 200)  : '';
+
       pageData.push({
         pageUrl,
         pageLabel,
+        pageTitle,
+        pageDesc,
         totalImages: imgs.length,
         withAlt,
         missingAlt,

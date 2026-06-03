@@ -9,6 +9,8 @@ import SeoDashboard from './components/SeoDashboard';
 import AccessibilityAudit from './components/AccessibilityAudit';
 import SettingsPanel from './components/SettingsPanel';
 import SiteAnalysisDashboard from './components/SiteAnalysisDashboard';
+import AdminDashboard from './components/AdminDashboard';
+import EmailAlertSettings from './components/EmailAlertSettings';
 
 const API_BASE = '/api';
 
@@ -240,7 +242,7 @@ export default function App() {
 
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-indigo-650 to-indigo-500 flex items-center justify-center font-black text-white shadow-lg shadow-indigo-600/25">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-indigo-700 to-indigo-500 flex items-center justify-center font-black text-white shadow-lg shadow-indigo-600/25 shrink-0">
                 M
               </div>
               <div>
@@ -410,6 +412,26 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setActiveTab('email_alerts')}
+            className={`px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeTab === 'email_alerts'
+                ? 'border-indigo-500 text-indigo-400'
+                : 'border-transparent text-slate-400 hover:text-slate-250'
+              }`}
+          >
+            Email Alerts
+          </button>
+
+          <button
+            onClick={() => setActiveTab('admin')}
+            className={`px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeTab === 'admin'
+                ? 'border-indigo-500 text-indigo-400'
+                : 'border-transparent text-slate-400 hover:text-slate-250'
+              }`}
+          >
+            Admin Dashboard
+          </button>
+
+          <button
             onClick={() => setActiveTab('settings')}
             className={`px-6 py-3 font-bold text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${activeTab === 'settings'
                 ? 'border-indigo-500 text-indigo-400'
@@ -424,6 +446,10 @@ export default function App() {
         {/* Dynamic tabs render panel */}
         {activeTab === 'settings' ? (
           <SettingsPanel showToast={showToast} />
+        ) : activeTab === 'admin' ? (
+          <AdminDashboard />
+        ) : activeTab === 'email_alerts' ? (
+          <EmailAlertSettings siteUrl={stats?.url || url} showToast={showToast} />
         ) : loading && !stats ? (
           <div className="py-24 text-center animate-fade-in-up">
             <RefreshCw className="h-8 w-8 text-indigo-500 rotate-infinite mx-auto mb-4" />
@@ -442,7 +468,7 @@ export default function App() {
               <SSLMonitor sslData={stats?.sslData} securityData={stats?.securityData} />
             )}
             {activeTab === 'seo' && (
-              <SeoDashboard seoData={stats?.seoData} />
+              <SeoDashboard seoData={stats?.seoData} crawlData={crawlData} />
             )}
             {activeTab === 'accessibility' && (
               <AccessibilityAudit 

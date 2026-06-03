@@ -457,26 +457,49 @@ export default function SiteAnalysisDashboard({ pageAnalysisData, seoData, activ
                 const src = img.src || (typeof img === 'string' ? img : '');
                 const suggested = img.suggestedAlt;
                 const page = img.foundOnPage;
+                const isImage = src && /\.(jpg|jpeg|png|gif|webp|svg|avif|bmp)(\?|$)/i.test(src);
                 return (
-                  <div key={i} className="p-2.5 bg-rose-950/10 border border-rose-900/15 rounded-lg space-y-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="font-mono text-[9px] text-rose-300 truncate flex-1" title={src}>
-                        <span className="text-rose-500 font-bold">IMG:</span> {src}
-                      </p>
-                      <span className={`shrink-0 px-1.5 py-0.5 rounded text-[8px] font-bold border ${img.altStatus === 'empty' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
-                        {img.altStatus === 'empty' ? 'EMPTY' : 'MISSING'}
-                      </span>
+                  <div key={i} className="p-2.5 bg-rose-950/10 border border-rose-900/15 rounded-lg space-y-1.5">
+                    <div className="flex items-start gap-2">
+                      {/* Image preview thumbnail */}
+                      {isImage && (
+                        <a href={src} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                          <img
+                            src={src}
+                            alt=""
+                            className="h-10 w-10 object-cover rounded border border-rose-500/20 hover:border-indigo-500/40 transition-all"
+                            onError={e => { e.target.style.display = 'none'; }}
+                          />
+                        </a>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Clickable image URL */}
+                          <a
+                            href={src}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-[9px] text-rose-300 hover:text-indigo-400 underline underline-offset-2 truncate flex-1 transition-colors"
+                            title={src}
+                          >
+                            {src}
+                          </a>
+                          <span className={`shrink-0 px-1.5 py-0.5 rounded text-[8px] font-bold border ${img.altStatus === 'empty' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
+                            {img.altStatus === 'empty' ? 'EMPTY ALT' : 'MISSING ALT'}
+                          </span>
+                        </div>
+                        {page && (
+                          <p className="text-[9px] text-slate-500 font-mono truncate mt-0.5">
+                            📄 {page.replace(/^https?:\/\/[^/]+/, '') || '/'}
+                          </p>
+                        )}
+                        {suggested && (
+                          <p className="text-[9px] text-emerald-300 font-semibold mt-0.5">
+                            💡 Suggested ALT: <em>"{suggested}"</em>
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    {page && (
-                      <p className="text-[9px] text-slate-500 font-mono truncate">
-                        📄 {page.replace(/^https?:\/\/[^/]+/, '') || '/'}
-                      </p>
-                    )}
-                    {suggested && (
-                      <p className="text-[9px] text-emerald-300 font-semibold">
-                        💡 Suggested ALT: <em>"{suggested}"</em>
-                      </p>
-                    )}
                   </div>
                 );
               })}

@@ -44,7 +44,42 @@ export default function SSLMonitor({ sslData, securityData }) {
   return (
     <div className="space-y-6 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
       
-      {/* SSL & Security Pillars */}
+      {/* SSL expiry urgent alerts */}
+      {valid && daysRemaining <= 7 && (
+        <div className={`glass-card p-4 border-l-4 flex items-center gap-3 ${daysRemaining <= 1 ? 'border-l-rose-600' : 'border-l-amber-500'}`}>
+          <ShieldAlert className={`h-5 w-5 shrink-0 ${daysRemaining <= 1 ? 'text-rose-400 animate-pulse' : 'text-amber-400'}`} />
+          <div>
+            <p className={`text-xs font-bold ${daysRemaining <= 1 ? 'text-rose-400' : 'text-amber-400'}`}>
+              {daysRemaining <= 1
+                ? `CRITICAL: SSL Certificate expires in ${daysRemaining} day${daysRemaining === 0 ? 's (TODAY)' : ''}! Renew immediately.`
+                : `WARNING: SSL Certificate expires in ${daysRemaining} days. Schedule renewal now.`}
+            </p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Issuer: {issuer} · Expires: {expiryDate ? new Date(expiryDate).toLocaleDateString() : '—'}</p>
+          </div>
+        </div>
+      )}
+
+      {/* SSL Active status banner */}
+      <div className={`glass-card p-4 flex items-center justify-between border ${valid ? 'border-emerald-500/20' : 'border-rose-500/20'}`}>
+        <div className="flex items-center gap-3">
+          <div className={`h-2.5 w-2.5 rounded-full ${valid ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`} />
+          <span className="text-xs font-bold text-slate-200">
+            SSL {valid ? 'Active' : 'Inactive / Invalid'}
+          </span>
+        </div>
+        <div className="flex items-center gap-4 text-xs">
+          <div className="text-right">
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Expires In</p>
+            <p className={`font-black mt-0.5 ${daysRemaining > 30 ? 'text-emerald-400' : daysRemaining > 7 ? 'text-amber-400' : 'text-rose-400'}`}>
+              {valid ? `${daysRemaining} Days` : 'Expired'}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Valid Until</p>
+            <p className="text-slate-300 font-bold mt-0.5">{expiryDate ? new Date(expiryDate).toLocaleDateString() : '—'}</p>
+          </div>
+        </div>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         
         {/* Security circular rating gauge */}

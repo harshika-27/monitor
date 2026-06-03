@@ -9,7 +9,7 @@ const { MonitorHistory, Alert } = require('../models/Schemas');
 const { analyzeSeo } = require('./seoService');
 const { analyzeUiUx } = require('./uiUxService');
 const { analyzePageStructure } = require('./pageAnalysisService');
-const { sendAlertEmail } = require('./emailService');
+const { sendAlertEmail, sendAlertEmailToWebsite } = require('./emailService');
 
 /**
  * Socket-level WHOIS client on port 43 to retrieve exact domain registration expiry.
@@ -232,6 +232,7 @@ const checkWebsiteStatus = async (url) => {
         message: `Downtime detected! Website returned HTTP ${response.status} status code.`
       });
       await sendAlertEmail(url, 'uptime', 'critical', `Downtime detected! Website returned HTTP ${response.status} status code.`);
+      sendAlertEmailToWebsite(url, 'uptime', 'critical', `Downtime detected! Website returned HTTP ${response.status} status code.`);
     }
   } catch (err) {
     auditReport.isUp = false;
@@ -244,6 +245,7 @@ const checkWebsiteStatus = async (url) => {
       message: `Downtime detected! SRE gateway connection failed: ${err.message}`
     });
     await sendAlertEmail(url, 'uptime', 'critical', `Downtime detected! SRE gateway connection failed: ${err.message}`);
+    sendAlertEmailToWebsite(url, 'uptime', 'critical', `Downtime detected! SRE gateway connection failed: ${err.message}`);
   }
 
   // 3. SSL Expiry Audit & WHOIS checks
@@ -263,6 +265,25 @@ const checkWebsiteStatus = async (url) => {
           message: `SSL Validation failed: ${sslInfo.message}`
         });
         await sendAlertEmail(url, 'ssl', 'critical', `SSL Validation failed: ${sslInfo.message}`);
+        sendAlertEmailToWebsite(url, 'ssl', 'critical', `SSL Validation failed: ${sslInfo.message}`);
+      } else if (sslInfo.daysRemaining <= 1) {
+        await Alert.create({
+          url,
+          category: 'ssl',
+          level: 'critical',
+          message: `CRITICAL: SSL Certificate expires in ${sslInfo.daysRemaining} day(s)! Renew immediately.`
+        });
+        await sendAlertEmail(url, 'ssl', 'critical', `CRITICAL: SSL Certificate expires in ${sslInfo.daysRemaining} day(s)! Renew immediately.`);
+        sendAlertEmailToWebsite(url, 'ssl', 'critical', `CRITICAL: SSL Certificate expires in ${sslInfo.daysRemaining} day(s)! Renew immediately.`);
+      } else if (sslInfo.daysRemaining <= 7) {
+        await Alert.create({
+          url,
+          category: 'ssl',
+          level: 'warning',
+          message: `SSL Certificate expires in ${sslInfo.daysRemaining} days! Schedule renewal now.`
+        });
+        await sendAlertEmail(url, 'ssl', 'warning', `SSL Certificate expires in ${sslInfo.daysRemaining} days!`);
+        sendAlertEmailToWebsite(url, 'ssl', 'warning', `SSL Certificate expires in ${sslInfo.daysRemaining} days! Expiry date: ${sslInfo.expiryDate ? new Date(sslInfo.expiryDate).toLocaleDateString() : 'unknown'}. Recommendation: Renew SSL certificate before expiry.`);
       } else if (sslInfo.daysRemaining < 30) {
         await Alert.create({
           url,
@@ -330,13 +351,20 @@ const checkWebsiteStatus = async (url) => {
   try {
     if (!seo.metaDescription?.text) {
       await Alert.create({ url, category: 'seo', level: 'warning', message: 'Missing Meta Description: No meta description tag found. This hurts SEO click-through rates.' });
+      sendAlertEmailToWebsite(url, 'seo', 'warning', 'Missing Meta Description: No meta description tag found. This hurts SEO click-through rates.');
     }
     const missingAltCount = (seo.imageAnalysis?.missingAlt || 0) + (seo.imageAnalysis?.emptyAlt || 0);
     if (missingAltCount > 0) {
       await Alert.create({ url, category: 'seo', level: 'warning', message: `Missing Image Alt Tags: ${missingAltCount} of ${seo.imageAnalysis?.totalImages || 0} images are missing ALT text (accessibility & SEO issue).` });
+      sendAlertEmailToWebsite(url, 'seo', 'warning', `Missing Image Alt Tags: ${missingAltCount} of ${seo.imageAnalysis?.totalImages || 0} images are missing ALT text.`);
     }
     if ((seo.links?.brokenCount || 0) > 0) {
       await Alert.create({ url, category: 'seo', level: 'warning', message: `Broken Links Detected: ${seo.links.brokenCount} broken link(s) found on the page. Fix to avoid SEO penalties.` });
+      sendAlertEmailToWebsite(url, 'seo', 'warning', `Broken Links Detected: ${seo.links.brokenCount} broken link(s) found. Fix to avoid SEO penalties.`);
+    }
+    // Score threshold alerts — fire if score drops below 60
+    if (seo.seoScore !== undefined && seo.seoScore < 60) {
+      sendAlertEmailToWebsite(url, 'seo', 'warning', `Low SEO Score: ${seo.seoScore}/100. Improve meta tags, headings, and content to boost search rankings.`);
     }
   } catch (e) {}
 
@@ -362,6 +390,18 @@ const checkWebsiteStatus = async (url) => {
     pageAnalysis = await analyzePageStructure(url, htmlContent, responseHeaders);
   } catch (e) {}
   auditReport.pageAnalysisData = JSON.stringify(pageAnalysis);
+
+  // Fire per-website performance and security threshold alerts
+  try {
+    const parsedPerf = JSON.parse(auditReport.performanceData || '{}');
+    const parsedSec  = JSON.parse(auditReport.securityData  || '{}');
+    if ((parsedPerf.performanceScore || 100) < 60) {
+      sendAlertEmailToWebsite(url, 'performance', 'warning', `Low Performance Score: ${parsedPerf.performanceScore}/100. Optimise images, minify scripts, and enable caching.`);
+    }
+    if ((parsedSec.securityScore || 100) < 60) {
+      sendAlertEmailToWebsite(url, 'security', 'warning', `Low Security Score: ${parsedSec.securityScore}/100. Missing security headers detected. Enable CSP, HSTS, X-Frame-Options.`);
+    }
+  } catch (e) {}
 
   // Save full audit report log in history collection
   const log = await MonitorHistory.create(auditReport);

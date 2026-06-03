@@ -4,7 +4,7 @@ import {
   Search, Link, Image, Globe, Sparkles 
 } from 'lucide-react';
 
-export default function SeoDashboard({ seoData }) {
+export default function SeoDashboard({ seoData, crawlData = null }) {
   const [altSearch, setAltSearch] = useState('');
 
   if (!seoData) {
@@ -53,8 +53,113 @@ export default function SeoDashboard({ seoData }) {
 
   return (
     <div className="space-y-6 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-      
-      {/* Overview SEO Score Card */}
+
+      {/* ── Summary stats row ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="glass-card p-4 flex flex-col justify-between">
+          <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">SEO Score</span>
+          <div className="mt-2">
+            <h2 className={`text-2xl font-black tracking-tight ${getScoreColor(seoScore)}`}>{seoScore}</h2>
+            <p className="text-[10px] mt-1 font-bold text-slate-500">Out of 100</p>
+          </div>
+        </div>
+        <div className="glass-card p-4 flex flex-col justify-between">
+          <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Total Pages</span>
+          <div className="mt-2">
+            <h2 className="text-2xl font-black tracking-tight text-indigo-400">
+              {crawlData?.pageCount?.estimatedPages || crawlData?.site_structure?.total_pages || '—'}
+            </h2>
+            <p className="text-[10px] mt-1 font-bold text-slate-500">
+              {crawlData ? 'BFS crawled' : 'Run scan to count'}
+            </p>
+          </div>
+        </div>
+        <div className="glass-card p-4 flex flex-col justify-between">
+          <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Total Images</span>
+          <div className="mt-2">
+            <h2 className="text-2xl font-black tracking-tight text-violet-400">{imageAnalysis?.totalImages || 0}</h2>
+            <p className="text-[10px] mt-1 font-bold text-slate-500">Detected on page</p>
+          </div>
+        </div>
+        <div className="glass-card p-4 flex flex-col justify-between">
+          <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Internal Links</span>
+          <div className="mt-2">
+            <h2 className="text-2xl font-black tracking-tight text-sky-400">{links?.internalCount || 0}</h2>
+            <p className="text-[10px] mt-1 font-bold text-slate-500">Same-domain links</p>
+          </div>
+        </div>
+        <div className="glass-card p-4 flex flex-col justify-between">
+          <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Broken Links</span>
+          <div className="mt-2">
+            <h2 className={`text-2xl font-black tracking-tight ${(links?.brokenCount || 0) > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>{links?.brokenCount || 0}</h2>
+            <p className="text-[10px] mt-1 font-bold text-slate-500">{(links?.brokenCount || 0) > 0 ? 'Need fixing' : 'All healthy'}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── SEO issues summary ─────────────────────────────────────────────── */}
+      {seoData?.alerts && seoData.alerts.length > 0 && (
+        <div className="glass-card p-5">
+          <h3 className="text-slate-200 font-extrabold text-sm mb-3 flex items-center gap-2">
+            <AlertTriangle className="text-amber-400 h-4 w-4" />
+            SEO Issues & Recommendations
+            <span className="ml-auto px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-[10px] font-black">{seoData.alerts.length}</span>
+          </h3>
+          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+            {seoData.alerts.map((alert, idx) => (
+              <div key={idx} className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-[10px] ${
+                alert.level === 'critical' ? 'bg-rose-500/5 border-rose-500/15 text-rose-300' :
+                alert.level === 'warning'  ? 'bg-amber-500/5 border-amber-500/15 text-amber-300' :
+                                             'bg-indigo-500/5 border-indigo-500/15 text-indigo-300'
+              }`}>
+                {alert.level === 'critical' ? <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-rose-400" /> :
+                 alert.level === 'warning'  ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-400" /> :
+                                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5 text-indigo-400" />}
+                <p className="leading-relaxed">{alert.message}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Broken link recommendations ────────────────────────────────────── */}
+      {(links?.brokenCount || 0) > 0 && (
+        <div className="glass-card p-6 border-l-4 border-l-rose-500">
+          <h3 className="text-slate-200 font-extrabold text-sm mb-4 flex items-center gap-2">
+            <XCircle className="text-rose-400 h-4 w-4" />
+            Broken Link Recommendations — How to Fix
+          </h3>
+          <div className="space-y-3">
+            {links.brokenLinks.map((bl, idx) => (
+              <div key={idx} className="p-4 bg-rose-500/5 border border-rose-500/15 rounded-xl space-y-2">
+                <div className="flex items-start gap-2">
+                  <span className="text-[9px] font-black text-rose-400 uppercase tracking-wider shrink-0 mt-0.5">{bl.type}</span>
+                  <p className="font-mono text-[10px] text-rose-300 break-all">{bl.url}</p>
+                </div>
+                <p className="text-[10px] text-slate-400">Reason: <span className="text-rose-300 font-bold">{bl.reason}</span></p>
+                <div className="pt-2 border-t border-rose-500/15">
+                  <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1.5">How to Fix:</p>
+                  <ul className="space-y-1">
+                    {bl.type === 'internal' ? (
+                      <>
+                        <li className="text-[10px] text-slate-400 flex items-center gap-1.5"><span className="text-emerald-400">→</span> Update the link to point to the correct page URL</li>
+                        <li className="text-[10px] text-slate-400 flex items-center gap-1.5"><span className="text-emerald-400">→</span> If the page was removed, set up a 301 redirect to the new URL</li>
+                        <li className="text-[10px] text-slate-400 flex items-center gap-1.5"><span className="text-emerald-400">→</span> Check for typos in the link href attribute</li>
+                      </>
+                    ) : (
+                      <>
+                        <li className="text-[10px] text-slate-400 flex items-center gap-1.5"><span className="text-emerald-400">→</span> Replace with an updated external URL if the resource moved</li>
+                        <li className="text-[10px] text-slate-400 flex items-center gap-1.5"><span className="text-emerald-400">→</span> Remove the link if the external resource no longer exists</li>
+                        <li className="text-[10px] text-slate-400 flex items-center gap-1.5"><span className="text-emerald-400">→</span> Use a web archive (web.archive.org) to find the original content</li>
+                      </>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         
         {/* SEO Circular Score */}
@@ -387,6 +492,254 @@ export default function SeoDashboard({ seoData }) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── SEO Optimization Details ───────────────────────────────────────── */}
+      <div className="glass-card p-6 space-y-5">
+        <h3 className="text-slate-200 font-extrabold text-base flex items-center gap-2 border-b border-slate-800/80 pb-3">
+          <Sparkles className="text-indigo-400 h-5 w-5" />
+          SEO Optimization Details
+        </h3>
+
+        {/* SEO Health Score summary */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className={`p-4 rounded-xl border text-xs ${title?.text ? 'bg-emerald-500/5 border-emerald-500/15' : 'bg-rose-500/5 border-rose-500/15'}`}>
+            <p className="font-bold uppercase tracking-wider text-[9px] mb-1 text-slate-400">Title Tag</p>
+            <p className={`font-extrabold text-sm ${title?.text ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {title?.text ? `${title.text.length} chars` : 'MISSING'}
+            </p>
+            <p className="text-[10px] text-slate-500 mt-1">{title?.message}</p>
+          </div>
+          <div className={`p-4 rounded-xl border text-xs ${metaDescription?.text ? 'bg-emerald-500/5 border-emerald-500/15' : 'bg-rose-500/5 border-rose-500/15'}`}>
+            <p className="font-bold uppercase tracking-wider text-[9px] mb-1 text-slate-400">Meta Description</p>
+            <p className={`font-extrabold text-sm ${metaDescription?.text ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {metaDescription?.text ? `${metaDescription.text.length} chars` : 'MISSING'}
+            </p>
+            <p className="text-[10px] text-slate-500 mt-1">{metaDescription?.message}</p>
+          </div>
+          <div className={`p-4 rounded-xl border text-xs ${(headings?.h1?.length === 1) ? 'bg-emerald-500/5 border-emerald-500/15' : 'bg-amber-500/5 border-amber-500/15'}`}>
+            <p className="font-bold uppercase tracking-wider text-[9px] mb-1 text-slate-400">H1 Headings</p>
+            <p className={`font-extrabold text-sm ${headings?.h1?.length === 1 ? 'text-emerald-400' : 'text-amber-400'}`}>
+              {headings?.h1?.length || 0} found
+            </p>
+            <p className="text-[10px] text-slate-500 mt-1">
+              {headings?.h1?.length === 0 ? 'No H1 tag — add one' : headings?.h1?.length > 1 ? 'Multiple H1 — use only one' : 'Single H1 — optimal'}
+            </p>
+          </div>
+        </div>
+
+        {/* Heading Structure */}
+        <div>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2.5">Heading Structure</p>
+          <div className="space-y-1.5">
+            {headings?.h1?.length === 0 && headings?.h2?.length === 0 && headings?.h3?.length === 0 ? (
+              <div className="p-3 bg-rose-500/5 border border-rose-500/15 rounded-xl flex items-center gap-2 text-xs text-rose-400">
+                <XCircle className="h-4 w-4 shrink-0" /> No heading tags detected on this page.
+              </div>
+            ) : (
+              <>
+                {(headings?.h1 || []).map((h, i) => (
+                  <div key={`h1-${i}`} className="flex items-center gap-2 p-2.5 bg-indigo-500/5 border border-indigo-500/15 rounded-lg">
+                    <span className="text-[9px] font-black text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded shrink-0">H1</span>
+                    <span className="text-xs text-slate-300 truncate">{h}</span>
+                  </div>
+                ))}
+                {(headings?.h2 || []).slice(0, 5).map((h, i) => (
+                  <div key={`h2-${i}`} className="flex items-center gap-2 p-2 bg-slate-800/20 border border-slate-800/40 rounded-lg ml-3">
+                    <span className="text-[9px] font-black text-slate-400 bg-slate-800/40 px-1.5 py-0.5 rounded shrink-0">H2</span>
+                    <span className="text-xs text-slate-400 truncate">{h}</span>
+                  </div>
+                ))}
+                {headings?.h2?.length > 5 && (
+                  <p className="text-[9px] text-slate-500 italic ml-3">+{headings.h2.length - 5} more H2 headings</p>
+                )}
+                {(headings?.h3 || []).slice(0, 3).map((h, i) => (
+                  <div key={`h3-${i}`} className="flex items-center gap-2 p-2 bg-slate-800/10 border border-slate-800/30 rounded-lg ml-6">
+                    <span className="text-[9px] font-bold text-slate-500 bg-slate-800/30 px-1.5 py-0.5 rounded shrink-0">H3</span>
+                    <span className="text-xs text-slate-500 truncate">{h}</span>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ALT Tag summary */}
+        <div>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2.5">ALT Tag Coverage</p>
+          <div className="flex items-center gap-4 p-3 bg-slate-800/20 border border-slate-800/40 rounded-xl text-xs">
+            <div className="text-center">
+              <p className="text-lg font-black text-slate-200">{imageAnalysis?.totalImages || 0}</p>
+              <p className="text-[9px] text-slate-500 uppercase font-bold">Total</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-black text-emerald-400">{imageAnalysis?.withAlt || 0}</p>
+              <p className="text-[9px] text-slate-500 uppercase font-bold">With ALT</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-black text-rose-400">{(imageAnalysis?.missingAlt || 0) + (imageAnalysis?.emptyAlt || 0)}</p>
+              <p className="text-[9px] text-slate-500 uppercase font-bold">Missing</p>
+            </div>
+            <div className="flex-1">
+              <div className="w-full bg-slate-900/60 rounded-full h-2 overflow-hidden border border-slate-800 mt-1">
+                {(() => {
+                  const total = imageAnalysis?.totalImages || 0;
+                  const pct = total > 0 ? Math.round(((imageAnalysis?.withAlt || 0) / total) * 100) : 100;
+                  return <div className={`h-full rounded-full transition-all duration-500 ${pct >= 90 ? 'bg-emerald-500' : pct >= 70 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${pct}%` }} />;
+                })()}
+              </div>
+              <p className="text-[9px] text-slate-500 mt-1 text-right">
+                {imageAnalysis?.totalImages > 0 ? Math.round(((imageAnalysis?.withAlt || 0) / imageAnalysis.totalImages) * 100) : 100}% compliant
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* SEO Recommendations */}
+        <div>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-2.5">SEO Recommendations</p>
+          <div className="space-y-2">
+            {(() => {
+              const recs = [];
+              if (!metaDescription?.text) recs.push({ level: 'critical', text: 'Add a meta description (120–160 chars) to improve search engine click-through rates.' });
+              if (metaDescription?.text && (metaDescription.text.length < 120 || metaDescription.text.length > 160)) recs.push({ level: 'warning', text: `Improve meta description length: currently ${metaDescription.text.length} chars, ideal is 120–160.` });
+              if (!title?.text) recs.push({ level: 'critical', text: 'Add a page title tag (30–65 chars). Missing title severely hurts SEO rankings.' });
+              if (title?.text && (title.text.length < 30 || title.text.length > 65)) recs.push({ level: 'warning', text: `Improve title length: currently ${title.text.length} chars, ideal is 30–65.` });
+              if (headings?.h1?.length === 0) recs.push({ level: 'critical', text: 'Add exactly one H1 heading to every page for clear topic signaling.' });
+              if (headings?.h1?.length > 1) recs.push({ level: 'warning', text: `Reduce H1 count to one (currently ${headings.h1.length}). Multiple H1 tags confuse search engines.` });
+              const missingAlt = (imageAnalysis?.missingAlt || 0) + (imageAnalysis?.emptyAlt || 0);
+              if (missingAlt > 0) recs.push({ level: 'warning', text: `Add ALT text to ${missingAlt} image${missingAlt > 1 ? 's' : ''}. Missing ALT tags hurt accessibility and image SEO.` });
+              if (links?.brokenCount > 0) recs.push({ level: 'warning', text: `Fix ${links.brokenCount} broken link${links.brokenCount > 1 ? 's' : ''}. Broken links hurt crawlability and user experience.` });
+              if (!canonical?.text) recs.push({ level: 'warning', text: 'Add a canonical URL tag to prevent duplicate content issues.' });
+              if (!robotsTxt?.exists) recs.push({ level: 'warning', text: 'Create a robots.txt file to guide search engine crawlers.' });
+              if (!sitemap?.exists) recs.push({ level: 'warning', text: 'Add a sitemap.xml to help search engines discover all your pages.' });
+              if (recs.length === 0) recs.push({ level: 'ok', text: 'All major SEO factors are properly configured. Keep monitoring for changes.' });
+              return recs;
+            })().map((rec, idx) => (
+              <div key={idx} className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-[10px] leading-relaxed ${
+                rec.level === 'critical' ? 'bg-rose-500/5 border-rose-500/15 text-rose-300' :
+                rec.level === 'warning'  ? 'bg-amber-500/5 border-amber-500/15 text-amber-300' :
+                                           'bg-emerald-500/5 border-emerald-500/15 text-emerald-300'
+              }`}>
+                {rec.level === 'critical' ? <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-rose-400" /> :
+                 rec.level === 'warning'  ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-400" /> :
+                                            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5 text-emerald-400" />}
+                <span>{rec.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Page SEO Analysis Table ────────────────────────────────────────── */}
+      <div className="glass-card p-6">
+        <h3 className="text-slate-200 font-extrabold text-base flex items-center gap-2 border-b border-slate-800/80 pb-3 mb-4">
+          <FileText className="text-indigo-400 h-5 w-5" />
+          Page SEO Analysis Table
+          {crawlData?.siteWideImages?.perPage?.length > 0 && (
+            <span className="ml-auto px-2 py-0.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full text-[10px] font-black">
+              {crawlData.siteWideImages.perPage.length} pages
+            </span>
+          )}
+        </h3>
+        <div className="overflow-x-auto max-h-96 overflow-y-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-900/80 backdrop-blur">
+                <th className="py-3 px-3">URL</th>
+                <th className="py-3 px-3">Title</th>
+                <th className="py-3 px-3 text-center">Title Len</th>
+                <th className="py-3 px-3">Meta Description</th>
+                <th className="py-3 px-3 text-center">Desc Len</th>
+                <th className="py-3 px-3">SEO Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(() => {
+                // Build rows — use crawl per-page data if available, else just homepage
+                const crawlPages = crawlData?.siteWideImages?.perPage || [];
+                const rows = crawlPages.length > 0
+                  ? crawlPages.map(p => ({
+                      url:   p.pageLabel || p.pageUrl,
+                      fullUrl: p.pageUrl,
+                      titleText: p.pageTitle || '',
+                      descText:  p.pageDesc  || '',
+                    }))
+                  : [{
+                      url: '/ (homepage)',
+                      fullUrl: '',
+                      titleText: title?.text || '',
+                      descText:  metaDescription?.text || '',
+                    }];
+
+                // Detect duplicates
+                const titleCounts = {};
+                const descCounts  = {};
+                rows.forEach(r => {
+                  if (r.titleText) titleCounts[r.titleText] = (titleCounts[r.titleText] || 0) + 1;
+                  if (r.descText)  descCounts[r.descText]   = (descCounts[r.descText]   || 0) + 1;
+                });
+
+                return rows.map((row, idx) => {
+                  const { url, fullUrl, titleText, descText } = row;
+                  const isDupTitle = titleText && titleCounts[titleText] > 1;
+                  const isDupDesc  = descText  && descCounts[descText]   > 1;
+                  const issues = [];
+                  if (!titleText) issues.push('No title');
+                  else if (titleText.length < 30 || titleText.length > 65) issues.push('Title length');
+                  if (isDupTitle) issues.push('Dup title');
+                  if (!descText)  issues.push('No desc');
+                  else if (descText.length < 120 || descText.length > 160) issues.push('Desc length');
+                  if (isDupDesc)  issues.push('Dup desc');
+                  const status = issues.length === 0 ? 'ok' : issues.some(i => i.startsWith('No ')) ? 'poor' : 'warning';
+                  return (
+                    <tr key={idx} className="border-b border-slate-800/40 hover:bg-slate-800/10 transition-all">
+                      <td className="py-2.5 px-3 font-mono text-indigo-400 text-[10px] max-w-[140px] truncate" title={fullUrl || url}>
+                        {url}
+                      </td>
+                      <td className="py-2.5 px-3 max-w-[160px]">
+                        <p className={`text-[10px] truncate ${isDupTitle ? 'text-amber-300' : 'text-slate-300'}`} title={titleText}>
+                          {titleText || <span className="text-rose-400 italic">Missing</span>}
+                        </p>
+                        {isDupTitle && <span className="text-[8px] text-amber-400 font-bold">DUPLICATE</span>}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`font-bold text-[10px] ${titleText.length >= 30 && titleText.length <= 65 ? 'text-emerald-400' : titleText.length > 0 ? 'text-amber-400' : 'text-rose-400'}`}>
+                          {titleText.length}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 max-w-[180px]">
+                        <p className={`text-[10px] truncate ${isDupDesc ? 'text-amber-300' : 'text-slate-400'}`} title={descText}>
+                          {descText || <span className="text-rose-400 italic">Missing</span>}
+                        </p>
+                        {isDupDesc && <span className="text-[8px] text-amber-400 font-bold">DUPLICATE</span>}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`font-bold text-[10px] ${descText.length >= 120 && descText.length <= 160 ? 'text-emerald-400' : descText.length > 0 ? 'text-amber-400' : 'text-rose-400'}`}>
+                          {descText.length}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border whitespace-nowrap ${
+                          status === 'ok'   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                          status === 'poor' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                              'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                        }`}>
+                          {status === 'ok' ? '✓ GOOD' : issues.slice(0, 2).join(', ')}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
+            </tbody>
+          </table>
+        </div>
+        {(!crawlData || !crawlData.siteWideImages?.perPage?.length) && (
+          <p className="text-[9px] text-slate-500 italic mt-3">
+            * Showing homepage data only. Click <strong>Run Scan</strong> then wait for the deep crawl to complete to see all pages.
+          </p>
+        )}
       </div>
 
     </div>

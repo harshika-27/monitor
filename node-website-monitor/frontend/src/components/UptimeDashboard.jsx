@@ -641,32 +641,61 @@ export default function UptimeDashboard({ stats, isSocketConnected }) {
               {/* Vitals Grid cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                 {[
-                  { name: 'First Contentful Paint', key: 'fcp', unit: 's', desc: 'Measures when first content renders.', target: 'Ideal: < 1.8s' },
-                  { name: 'Largest Contentful Paint', key: 'lcp', unit: 's', desc: 'Measures main page content load.', target: 'Ideal: < 2.5s' },
-                  { name: 'Cumulative Layout Shift', key: 'cls', unit: '', desc: 'Measures visual content stability.', target: 'Ideal: < 0.10' },
-                  { name: 'First Input Delay', key: 'fid', unit: 'ms', desc: 'Measures initial button responsiveness.', target: 'Ideal: < 100ms' },
-                  { name: 'Interaction to Next Paint', key: 'inp', unit: 'ms', desc: 'Measures visual feedback latency.', target: 'Ideal: < 200ms' },
-                  { name: 'Speed Index', key: 'speedIndex', unit: 's', desc: 'Measures visual progression speed.', target: 'Ideal: < 3.4s' }
+                  { name: 'First Contentful Paint', key: 'fcp', unit: 's', desc: 'Measures when first content renders.', target: 'Ideal: < 1.8s',
+                    getReason: (v) => v > 3 ? 'Render-blocking scripts or stylesheets delaying initial paint.' : v > 1.8 ? 'Slow server response or large CSS bundle affecting paint start.' : 'FCP is within acceptable range.',
+                    getSuggestion: (v) => v > 1.8 ? 'Eliminate render-blocking resources. Inline critical CSS and defer non-critical JS.' : 'No action needed.' },
+                  { name: 'Largest Contentful Paint', key: 'lcp', unit: 's', desc: 'Measures main page content load.', target: 'Ideal: < 2.5s',
+                    getReason: (v) => v > 4 ? 'Large hero image or video causing slow loading.' : v > 2.5 ? 'Slow server response time or large resource blocking main content.' : 'LCP is within acceptable range.',
+                    getSuggestion: (v) => v > 2.5 ? 'Compress images, use modern formats (WebP/AVIF), apply lazy loading, and use a CDN.' : 'No action needed.' },
+                  { name: 'Cumulative Layout Shift', key: 'cls', unit: '', desc: 'Measures visual content stability.', target: 'Ideal: < 0.10',
+                    getReason: (v) => v > 0.25 ? 'Images or ads without explicit dimensions causing layout shifts.' : v > 0.1 ? 'Dynamic content or web fonts causing elements to shift during load.' : 'CLS is within acceptable range.',
+                    getSuggestion: (v) => v > 0.1 ? 'Always set width/height on images and video. Avoid inserting content above existing content.' : 'No action needed.' },
+                  { name: 'First Input Delay', key: 'fid', unit: 'ms', desc: 'Measures initial button responsiveness.', target: 'Ideal: < 100ms',
+                    getReason: (v) => v > 300 ? 'Heavy JavaScript execution blocking the main thread.' : v > 100 ? 'Long tasks on the main thread delaying user interaction response.' : 'FID is within acceptable range.',
+                    getSuggestion: (v) => v > 100 ? 'Break up long JavaScript tasks. Use web workers for heavy computations. Defer unused JS.' : 'No action needed.' },
+                  { name: 'Interaction to Next Paint', key: 'inp', unit: 'ms', desc: 'Measures visual feedback latency.', target: 'Ideal: < 200ms',
+                    getReason: (v) => v > 500 ? 'Slow event callbacks or expensive DOM updates on user interaction.' : v > 200 ? 'Heavy re-renders or synchronous operations blocking interaction response.' : 'INP is within acceptable range.',
+                    getSuggestion: (v) => v > 200 ? 'Optimize event handlers. Minimise synchronous DOM operations. Use requestAnimationFrame for visual updates.' : 'No action needed.' },
+                  { name: 'Speed Index', key: 'speedIndex', unit: 's', desc: 'Measures visual progression speed.', target: 'Ideal: < 3.4s',
+                    getReason: (v) => v > 5 ? 'Many render-blocking resources slowing visual population of the page.' : v > 3.4 ? 'Slow resource loading order affecting how quickly content becomes visible.' : 'Speed Index is within acceptable range.',
+                    getSuggestion: (v) => v > 3.4 ? 'Prioritise above-the-fold content loading. Reduce unused CSS/JS. Enable server-side compression.' : 'No action needed.' },
                 ].map(v => {
                   const val = perf?.vitals?.[v.key] || 0;
                   let color = 'text-emerald-400';
+                  let status = 'good';
                   if (v.key === 'cls' ? val > 0.25 : v.key === 'lcp' ? val > 4.0 : val > 300) {
-                    color = 'text-rose-400';
+                    color = 'text-rose-400'; status = 'poor';
                   } else if (v.key === 'cls' ? val > 0.1 : v.key === 'lcp' ? val > 2.5 : val > 100) {
-                    color = 'text-amber-400';
+                    color = 'text-amber-400'; status = 'needs-improvement';
                   }
-                  
+                  const reason     = v.getReason(val);
+                  const suggestion = v.getSuggestion(val);
+
                   return (
-                    <div key={v.key} className="bg-dark-800/40 border border-slate-800/60 p-5 rounded-xl flex flex-col justify-between hover:border-indigo-500/25 transition-all">
+                    <div key={v.key} className={`bg-dark-800/40 border p-5 rounded-xl flex flex-col justify-between hover:border-indigo-500/25 transition-all ${status === 'poor' ? 'border-rose-500/30' : status === 'needs-improvement' ? 'border-amber-500/30' : 'border-slate-800/60'}`}>
                       <div>
                         <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest block">{v.name}</span>
                         <h4 className={`text-2xl font-black mt-2 ${color}`}>
                           {val}{v.unit}
                         </h4>
                       </div>
-                      <div className="mt-4 pt-3 border-t border-slate-800/40 text-[11px] text-slate-500">
-                        <p>{v.desc}</p>
-                        <p className="font-semibold text-slate-400 mt-1">{v.target}</p>
+                      <div className="mt-4 pt-3 border-t border-slate-800/40 space-y-2 text-[10px]">
+                        <p className="text-slate-500">{v.target}</p>
+                        {status !== 'good' && (
+                          <>
+                            <div className="p-2 bg-slate-900/40 rounded-lg border border-slate-800/60">
+                              <p className="text-slate-400 font-bold mb-0.5">⚠ Reason:</p>
+                              <p className="text-slate-500 leading-relaxed">{reason}</p>
+                            </div>
+                            <div className="p-2 bg-indigo-500/5 rounded-lg border border-indigo-500/15">
+                              <p className="text-indigo-400 font-bold mb-0.5">💡 Suggestion:</p>
+                              <p className="text-slate-400 leading-relaxed">{suggestion}</p>
+                            </div>
+                          </>
+                        )}
+                        {status === 'good' && (
+                          <p className="text-emerald-400 font-bold flex items-center gap-1">✓ {reason}</p>
+                        )}
                       </div>
                     </div>
                   );

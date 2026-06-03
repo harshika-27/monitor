@@ -263,8 +263,107 @@ const Alert = {
   }
 };
 
+// ── 4. WebsiteEmailConfig ────────────────────────────────────────────────────
+// Stores per-website alert email configuration
+
+const websiteEmailConfigSchema = new mongoose.Schema({
+  url:              { type: String, required: true, unique: true },
+  alertEmail:       { type: String, default: '' },
+  alertsEnabled:    { type: Boolean, default: false },
+  alertFrequency:   { type: String, enum: ['instant', 'daily', 'weekly'], default: 'instant' },
+  lastEmailSent:    { type: Date, default: null },
+  totalEmailsSent:  { type: Number, default: 0 },
+  lastAlertType:    { type: String, default: '' },
+  updatedAt:        { type: Date, default: Date.now }
+});
+
+const RealWebsiteEmailConfig = mongoose.model('RealWebsiteEmailConfig', websiteEmailConfigSchema);
+let inMemoryEmailConfig = [];
+
+const WebsiteEmailConfig = {
+  findOne: async (query = {}) => {
+    if (isConnected()) return await RealWebsiteEmailConfig.findOne(query);
+    return inMemoryEmailConfig.find(c => c.url === query.url) || null;
+  },
+  findOneAndUpdate: async (query, updateData, options = {}) => {
+    if (isConnected()) return await RealWebsiteEmailConfig.findOneAndUpdate(query, updateData, options);
+    let index = inMemoryEmailConfig.findIndex(c => c.url === query.url);
+    if (index !== -1) {
+      inMemoryEmailConfig[index] = { ...inMemoryEmailConfig[index], ...updateData, updatedAt: new Date() };
+      return inMemoryEmailConfig[index];
+    } else if (options.upsert) {
+      const doc = { url: query.url, alertEmail: '', alertsEnabled: false, alertFrequency: 'instant', totalEmailsSent: 0, lastAlertType: '', updatedAt: new Date(), _id: 'econf_' + Math.random().toString(36).substr(2, 9), ...updateData };
+      inMemoryEmailConfig.push(doc);
+      return doc;
+    }
+    return null;
+  },
+  find: async (query = {}) => {
+    if (isConnected()) return await RealWebsiteEmailConfig.find(query);
+    return inMemoryEmailConfig;
+  },
+};
+
+// ── 5. EmailAlertHistory ─────────────────────────────────────────────────────
+// Stores every email alert sent for audit / admin dashboard display
+
+const emailAlertHistorySchema = new mongoose.Schema({
+  url:         { type: String, required: true },
+  alertEmail:  { type: String, required: true },
+  alertType:   { type: String, required: true },   // e.g. 'uptime', 'ssl', 'seo'
+  level:       { type: String, required: true },   // 'info' | 'warning' | 'critical'
+  subject:     { type: String, required: true },
+  message:     { type: String, required: true },
+  delivered:   { type: Boolean, default: false },
+  sentAt:      { type: Date, default: Date.now }
+});
+
+const RealEmailAlertHistory = mongoose.model('RealEmailAlertHistory', emailAlertHistorySchema);
+let inMemoryEmailHistory = [];
+
+const EmailAlertHistory = {
+  create: async (data) => {
+    if (isConnected()) return await RealEmailAlertHistory.create(data);
+    const doc = { ...data, _id: 'emailhist_' + Math.random().toString(36).substr(2, 9), sentAt: new Date() };
+    inMemoryEmailHistory.unshift(doc);
+    return doc;
+  },
+  find: (query = {}) => {
+    const isConn = isConnected();
+    const filterData = () => {
+      let res = inMemoryEmailHistory;
+      if (query.url) res = res.filter(e => e.url === query.url);
+      return res;
+    };
+    return {
+      sort: (s) => ({
+        limit: async (lim) => {
+          if (isConn) return await RealEmailAlertHistory.find(query).sort(s).limit(lim);
+          return filterData().slice(0, lim);
+        },
+        then: async (resolve) => {
+          if (isConn) return resolve(await RealEmailAlertHistory.find(query).sort(s));
+          return resolve(filterData());
+        }
+      }),
+      then: async (resolve) => {
+        if (isConn) return resolve(await RealEmailAlertHistory.find(query));
+        return resolve(filterData());
+      }
+    };
+  },
+  countDocuments: async (query = {}) => {
+    if (isConnected()) return await RealEmailAlertHistory.countDocuments(query);
+    let res = inMemoryEmailHistory;
+    if (query.url) res = res.filter(e => e.url === query.url);
+    return res.length;
+  }
+};
+
 module.exports = {
   MonitorHistory,
   WordPressMonitor,
-  Alert
+  Alert,
+  WebsiteEmailConfig,
+  EmailAlertHistory
 };
