@@ -1,11 +1,266 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   FileText, CheckCircle2, XCircle, AlertTriangle, Layers, 
   Search, Link, Image, Globe, Sparkles 
 } from 'lucide-react';
+import { MissingAltPanel, BrokenLinksPanel, SeoWarningPanel } from './SeoDetailModal';
+
+// ── PageSeoTableInline ────────────────────────────────────────────────────────
+function PageSeoTableInline({ crawlData, title, metaDescription, headings, imageAnalysis, links, onAltClick, openWarning }) {
+  const [expandedRow, setExpandedRow] = useState(null);
+
+  const crawlPages = crawlData?.siteWideImages?.perPage || [];
+  const rows = crawlPages.length > 0
+    ? crawlPages.map(p => ({
+        url:           p.pageLabel || p.pageUrl,
+        fullUrl:       p.pageUrl,
+        titleText:     p.pageTitle   || '',
+        descText:      p.pageDesc    || '',
+        h1Count:       p.h1Count     ?? null,
+        h2Count:       p.h2Count     ?? null,
+        h3Count:       p.h3Count     ?? null,
+        totalImages:   p.totalImages || 0,
+        missingAlt:    p.missingAlt  || 0,
+        lastCrawled:   p.lastCrawled || null,
+      }))
+    : [{
+        url:         '/ (homepage)',
+        fullUrl:     '',
+        titleText:   title?.text || '',
+        descText:    metaDescription?.text || '',
+        h1Count:     headings?.h1?.length ?? 0,
+        h2Count:     headings?.h2?.length ?? 0,
+        h3Count:     headings?.h3?.length ?? 0,
+        totalImages: imageAnalysis?.totalImages || 0,
+        missingAlt:  (imageAnalysis?.missingAlt || 0) + (imageAnalysis?.emptyAlt || 0),
+        lastCrawled: null,
+      }];
+
+  const titleCounts = {};
+  const descCounts  = {};
+  rows.forEach(r => {
+    if (r.titleText) titleCounts[r.titleText] = (titleCounts[r.titleText] || 0) + 1;
+    if (r.descText)  descCounts[r.descText]   = (descCounts[r.descText]   || 0) + 1;
+  });
+
+  const getRowWarnings = (r) => {
+    const w = [];
+    const isDupTitle = r.titleText && titleCounts[r.titleText] > 1;
+    const isDupDesc  = r.descText  && descCounts[r.descText]   > 1;
+    if (!r.titleText)              w.push({ sev: 'critical', text: 'Missing title tag',                          type: 'missing_title'   });
+    else if (r.titleText.length < 30) w.push({ sev: 'warning', text: `Title too short (${r.titleText.length} chars, min 30)`, type: 'short_title' });
+    else if (r.titleText.length > 60) w.push({ sev: 'warning', text: `Title too long (${r.titleText.length} chars, max 60)`,  type: 'long_title'  });
+    if (isDupTitle)                w.push({ sev: 'warning', text: 'Duplicate title',                             type: 'short_title'     });
+    if (!r.descText)               w.push({ sev: 'critical', text: 'Missing meta description',                   type: 'missing_meta_desc' });
+    else if (r.descText.length < 120) w.push({ sev: 'warning', text: `Desc too short (${r.descText.length} chars, min 120)`, type: 'short_meta_desc' });
+    else if (r.descText.length > 160) w.push({ sev: 'warning', text: `Desc too long (${r.descText.length} chars, max 160)`,  type: 'long_meta_desc'  });
+    if (isDupDesc)                 w.push({ sev: 'warning', text: 'Duplicate description',                       type: 'short_meta_desc' });
+    if (r.h1Count === 0)           w.push({ sev: 'critical', text: 'Missing H1',                                 type: 'missing_h1'      });
+    else if (r.h1Count > 1)        w.push({ sev: 'warning', text: `Multiple H1 (${r.h1Count})`,                  type: 'multiple_h1'     });
+    if (r.h2Count === 0 && r.h2Count !== null) w.push({ sev: 'warning', text: 'No H2 tags',                     type: 'missing_h2'      });
+    if (r.missingAlt > 0)          w.push({ sev: 'warning', text: `${r.missingAlt} missing ALT`,                type: 'missing_alt'      });
+    return w;
+  };
+
+  return (
+    <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
+      <table className="w-full text-left border-collapse text-xs">
+        <thead className="sticky top-0 z-10">
+          <tr className="border-b border-slate-800 bg-slate-900/90 backdrop-blur text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+            <th className="py-2.5 px-3 whitespace-nowrap">Page URL</th>
+            <th className="py-2.5 px-3">Title</th>
+            <th className="py-2.5 px-3 text-center">T.Len</th>
+            <th className="py-2.5 px-3">Desc</th>
+            <th className="py-2.5 px-3 text-center">D.Len</th>
+            <th className="py-2.5 px-3 text-center">H1</th>
+            <th className="py-2.5 px-3 text-center">H2</th>
+            <th className="py-2.5 px-3 text-center">H3</th>
+            <th className="py-2.5 px-3">Warnings</th>
+            <th className="py-2.5 px-3 whitespace-nowrap">Last Crawled</th>
+            <th className="py-2.5 px-3">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, idx) => {
+            const warnings = getRowWarnings(row);
+            const status   = warnings.length === 0 ? 'ok' : warnings.some(w => w.sev === 'critical') ? 'poor' : 'warning';
+            const isExpanded = expandedRow === idx;
+
+            return (
+              <>
+                <tr
+                  key={idx}
+                  className={`border-b border-slate-800/40 cursor-pointer transition-all ${isExpanded ? 'bg-indigo-500/5' : 'hover:bg-slate-800/10'}`}
+                  onClick={() => setExpandedRow(isExpanded ? null : idx)}
+                  title="Click to expand page details"
+                >
+                  {/* URL */}
+                  <td className="py-2.5 px-3 font-mono text-indigo-400 text-[10px] max-w-[130px] truncate" title={row.fullUrl || row.url}>
+                    {row.url}
+                  </td>
+                  {/* Title */}
+                  <td className="py-2.5 px-3 max-w-[150px]">
+                    <p className="text-[10px] truncate text-slate-300" title={row.titleText}>
+                      {row.titleText || <span className="text-rose-400 italic">Missing</span>}
+                    </p>
+                  </td>
+                  {/* Title len */}
+                  <td className="py-2.5 px-3 text-center">
+                    <span className={`font-bold text-[10px] ${row.titleText.length >= 30 && row.titleText.length <= 60 ? 'text-emerald-400' : row.titleText.length > 0 ? 'text-amber-400' : 'text-rose-400'}`}>
+                      {row.titleText.length}
+                    </span>
+                  </td>
+                  {/* Desc */}
+                  <td className="py-2.5 px-3 max-w-[160px]">
+                    <p className="text-[10px] truncate text-slate-400" title={row.descText}>
+                      {row.descText || <span className="text-rose-400 italic">Missing</span>}
+                    </p>
+                  </td>
+                  {/* Desc len */}
+                  <td className="py-2.5 px-3 text-center">
+                    <span className={`font-bold text-[10px] ${row.descText.length >= 120 && row.descText.length <= 160 ? 'text-emerald-400' : row.descText.length > 0 ? 'text-amber-400' : 'text-rose-400'}`}>
+                      {row.descText.length}
+                    </span>
+                  </td>
+                  {/* H1 */}
+                  <td className="py-2.5 px-3 text-center">
+                    <span className={`font-black text-sm ${row.h1Count === 1 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {row.h1Count ?? '—'}
+                    </span>
+                  </td>
+                  {/* H2 */}
+                  <td className="py-2.5 px-3 text-center">
+                    <span className={`font-black text-sm ${(row.h2Count || 0) >= 2 ? 'text-emerald-400' : (row.h2Count || 0) === 1 ? 'text-amber-400' : 'text-rose-400'}`}>
+                      {row.h2Count ?? '—'}
+                    </span>
+                  </td>
+                  {/* H3 */}
+                  <td className="py-2.5 px-3 text-center">
+                    <span className="font-bold text-sm text-slate-400">{row.h3Count ?? '—'}</span>
+                  </td>
+                  {/* Warnings */}
+                  <td className="py-2.5 px-3">
+                    <div className="flex flex-wrap gap-1">
+                      {warnings.length === 0
+                        ? <span className="text-[9px] text-emerald-400 font-bold">✓ OK</span>
+                        : warnings.slice(0, 2).map((w, wi) => (
+                          <button
+                            key={wi}
+                            onClick={e => {
+                              e.stopPropagation();
+                              if (w.type === 'missing_alt') onAltClick();
+                              else openWarning(w.type, w.text, '', row.fullUrl || row.url);
+                            }}
+                            className={`px-1.5 py-0.5 rounded border text-[8px] font-black cursor-pointer hover:opacity-80 transition-opacity ${
+                              w.sev === 'critical' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                            }`}
+                            title="Click for details"
+                          >
+                            {w.sev === 'critical' ? '❌' : '⚠'} {w.text.split('(')[0].trim()}
+                          </button>
+                        ))}
+                      {warnings.length > 2 && (
+                        <span className="text-[8px] text-slate-500">+{warnings.length - 2}</span>
+                      )}
+                    </div>
+                  </td>
+                  {/* Last crawled */}
+                  <td className="py-2.5 px-3 text-[9px] text-slate-500 font-mono whitespace-nowrap">
+                    {row.lastCrawled ? new Date(row.lastCrawled).toLocaleDateString() : '—'}
+                  </td>
+                  {/* Status */}
+                  <td className="py-2.5 px-3">
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border whitespace-nowrap ${
+                      status === 'ok'   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                      status === 'poor' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                          'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                    }`}>
+                      {status === 'ok' ? '✓ GOOD' : status === 'poor' ? '❌ ISSUES' : '⚠ WARNINGS'}
+                    </span>
+                  </td>
+                </tr>
+
+                {/* Expanded detail row — #7 Page Details Expansion */}
+                {isExpanded && (
+                  <tr key={`exp-${idx}`} className="border-b border-indigo-500/20 bg-indigo-500/3">
+                    <td colSpan={11} className="px-4 py-4">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                        <div>
+                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">Full URL</p>
+                          <p className="font-mono text-indigo-400 break-all">{row.fullUrl || row.url}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">Title ({row.titleText.length} chars)</p>
+                          <p className="text-slate-300">{row.titleText || <span className="text-rose-400 italic">Missing</span>}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">Meta Description ({row.descText.length} chars)</p>
+                          <p className="text-slate-400 leading-relaxed">{row.descText || <span className="text-rose-400 italic">Missing</span>}</p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">Heading Counts</p>
+                          <div className="flex gap-3">
+                            <span className={`font-black ${row.h1Count === 1 ? 'text-emerald-400' : 'text-rose-400'}`}>H1: {row.h1Count ?? 0}</span>
+                            <span className={`font-black ${(row.h2Count || 0) >= 1 ? 'text-emerald-400' : 'text-amber-400'}`}>H2: {row.h2Count ?? 0}</span>
+                            <span className="text-slate-400 font-bold">H3: {row.h3Count ?? 0}</span>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">Images</p>
+                          <p className="text-slate-300">{row.totalImages} total
+                            {row.missingAlt > 0 && (
+                              <button onClick={onAltClick} className="ml-1.5 text-amber-400 font-bold hover:underline cursor-pointer">
+                                ({row.missingAlt} missing ALT ↗)
+                              </button>
+                            )}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">Last Crawled</p>
+                          <p className="text-slate-300">{row.lastCrawled ? new Date(row.lastCrawled).toLocaleString() : 'Not available'}</p>
+                        </div>
+                        {warnings.length > 0 && (
+                          <div className="col-span-2 md:col-span-3">
+                            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">All Warnings</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {warnings.map((w, wi) => (
+                                <button
+                                  key={wi}
+                                  onClick={() => {
+                                    if (w.type === 'missing_alt') onAltClick();
+                                    else openWarning(w.type, w.text, '', row.fullUrl || row.url);
+                                  }}
+                                  className={`px-2 py-0.5 rounded border text-[9px] font-bold cursor-pointer hover:opacity-80 ${
+                                    w.sev === 'critical' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                  }`}
+                                >
+                                  {w.sev === 'critical' ? '❌' : '⚠'} {w.text}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 export default function SeoDashboard({ seoData, crawlData = null }) {
   const [altSearch, setAltSearch] = useState('');
+  const [showAltPanel,     setShowAltPanel]     = useState(false);
+  const [showBrokenPanel,  setShowBrokenPanel]  = useState(false);
+  const [activeWarning,    setActiveWarning]    = useState(null); // { type, label, value, pageUrl, items }
+
+  const openWarning = (type, label, value = '', pageUrl = '', items = []) =>
+    setActiveWarning({ type, label, value, pageUrl, items });
 
   if (!seoData) {
     return (
@@ -77,8 +332,20 @@ export default function SeoDashboard({ seoData, crawlData = null }) {
         <div className="glass-card p-4 flex flex-col justify-between">
           <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Total Images</span>
           <div className="mt-2">
-            <h2 className="text-2xl font-black tracking-tight text-violet-400">{imageAnalysis?.totalImages || 0}</h2>
-            <p className="text-[10px] mt-1 font-bold text-slate-500">Detected on page</p>
+            <button
+              onClick={() => setShowAltPanel(true)}
+              className="text-2xl font-black tracking-tight text-violet-400 cursor-pointer hover:text-violet-300 transition-colors text-left"
+              title="Click to see image ALT details"
+            >
+              {imageAnalysis?.totalImages || 0}
+            </button>
+            <p className="text-[10px] mt-1 font-bold text-slate-500">
+              {((imageAnalysis?.missingAlt || 0) + (imageAnalysis?.emptyAlt || 0)) > 0
+                ? <button onClick={() => setShowAltPanel(true)} className="text-amber-400 cursor-pointer hover:underline">
+                    {(imageAnalysis?.missingAlt || 0) + (imageAnalysis?.emptyAlt || 0)} missing ALT ↗
+                  </button>
+                : 'All ALTs present'}
+            </p>
           </div>
         </div>
         <div className="glass-card p-4 flex flex-col justify-between">
@@ -91,8 +358,18 @@ export default function SeoDashboard({ seoData, crawlData = null }) {
         <div className="glass-card p-4 flex flex-col justify-between">
           <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Broken Links</span>
           <div className="mt-2">
-            <h2 className={`text-2xl font-black tracking-tight ${(links?.brokenCount || 0) > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>{links?.brokenCount || 0}</h2>
-            <p className="text-[10px] mt-1 font-bold text-slate-500">{(links?.brokenCount || 0) > 0 ? 'Need fixing' : 'All healthy'}</p>
+            <button
+              onClick={() => setShowBrokenPanel(true)}
+              className={`text-2xl font-black tracking-tight cursor-pointer hover:opacity-80 transition-opacity text-left ${(links?.brokenCount || 0) > 0 ? 'text-rose-400' : 'text-emerald-400'}`}
+              title="Click to see broken link details"
+            >
+              {links?.brokenCount || 0}
+            </button>
+            <p className="text-[10px] mt-1 font-bold text-slate-500">
+              {(links?.brokenCount || 0) > 0
+                ? <button onClick={() => setShowBrokenPanel(true)} className="text-rose-400 cursor-pointer hover:underline">View broken links ↗</button>
+                : 'All healthy'}
+            </p>
           </div>
         </div>
       </div>
@@ -106,18 +383,49 @@ export default function SeoDashboard({ seoData, crawlData = null }) {
             <span className="ml-auto px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-[10px] font-black">{seoData.alerts.length}</span>
           </h3>
           <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-            {seoData.alerts.map((alert, idx) => (
-              <div key={idx} className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-[10px] ${
-                alert.level === 'critical' ? 'bg-rose-500/5 border-rose-500/15 text-rose-300' :
-                alert.level === 'warning'  ? 'bg-amber-500/5 border-amber-500/15 text-amber-300' :
-                                             'bg-indigo-500/5 border-indigo-500/15 text-indigo-300'
-              }`}>
-                {alert.level === 'critical' ? <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-rose-400" /> :
-                 alert.level === 'warning'  ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-400" /> :
-                                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5 text-indigo-400" />}
-                <p className="leading-relaxed">{alert.message}</p>
-              </div>
-            ))}
+            {seoData.alerts.map((alert, idx) => {
+              // Map alert message to warning type for the modal
+              const getWarningType = (msg) => {
+                const m = msg.toLowerCase();
+                if (m.includes('missing') && m.includes('title')) return 'missing_title';
+                if (m.includes('title') && m.includes('short')) return 'short_title';
+                if (m.includes('title') && m.includes('long'))  return 'long_title';
+                if (m.includes('title length')) return 'short_title';
+                if (m.includes('missing') && m.includes('description')) return 'missing_meta_desc';
+                if (m.includes('description') && (m.includes('short') || m.includes('length'))) return 'short_meta_desc';
+                if (m.includes('description') && m.includes('long')) return 'long_meta_desc';
+                if (m.includes('missing h1') || (m.includes('h1') && m.includes('heading'))) return 'missing_h1';
+                if (m.includes('multiple h1')) return 'multiple_h1';
+                if (m.includes('h2')) return 'missing_h2';
+                if (m.includes('alt')) return 'missing_alt';
+                if (m.includes('broken') && m.includes('link')) return 'broken_links';
+                return null;
+              };
+              const wType = getWarningType(alert.message);
+              return (
+                <div
+                  key={idx}
+                  onClick={wType ? () => {
+                    if (wType === 'missing_alt') setShowAltPanel(true);
+                    else if (wType === 'broken_links') setShowBrokenPanel(true);
+                    else openWarning(wType, alert.message);
+                  } : undefined}
+                  className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-[10px] transition-all ${
+                    alert.level === 'critical' ? 'bg-rose-500/5 border-rose-500/15 text-rose-300' :
+                    alert.level === 'warning'  ? 'bg-amber-500/5 border-amber-500/15 text-amber-300' :
+                                                 'bg-indigo-500/5 border-indigo-500/15 text-indigo-300'
+                  } ${wType ? 'cursor-pointer hover:opacity-80' : ''}`}
+                  title={wType ? 'Click for details' : undefined}
+                >
+                  {alert.level === 'critical' ? <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-rose-400" /> :
+                   alert.level === 'warning'  ? <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-400" /> :
+                                                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5 text-indigo-400" />}
+                  <p className="leading-relaxed">{alert.message}
+                    {wType && <span className="ml-1.5 text-[8px] opacity-60">↗ click for details</span>}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -631,118 +939,35 @@ export default function SeoDashboard({ seoData, crawlData = null }) {
         </div>
       </div>
 
-      {/* ── Page SEO Analysis Table ────────────────────────────────────────── */}
+      {/* ── Page SEO Analysis Table — #5 warnings, #6 heading, #7 expand, #8 last modified ── */}
       <div className="glass-card p-6">
         <h3 className="text-slate-200 font-extrabold text-base flex items-center gap-2 border-b border-slate-800/80 pb-3 mb-4">
           <FileText className="text-indigo-400 h-5 w-5" />
-          Page SEO Analysis Table
+          Page SEO Analysis
           {crawlData?.siteWideImages?.perPage?.length > 0 && (
             <span className="ml-auto px-2 py-0.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full text-[10px] font-black">
               {crawlData.siteWideImages.perPage.length} pages
             </span>
           )}
         </h3>
-        <div className="overflow-x-auto max-h-96 overflow-y-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="sticky top-0 z-10">
-              <tr className="border-b border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px] bg-slate-900/80 backdrop-blur">
-                <th className="py-3 px-3">URL</th>
-                <th className="py-3 px-3">Title</th>
-                <th className="py-3 px-3 text-center">Title Len</th>
-                <th className="py-3 px-3">Meta Description</th>
-                <th className="py-3 px-3 text-center">Desc Len</th>
-                <th className="py-3 px-3">SEO Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(() => {
-                // Build rows — use crawl per-page data if available, else just homepage
-                const crawlPages = crawlData?.siteWideImages?.perPage || [];
-                const rows = crawlPages.length > 0
-                  ? crawlPages.map(p => ({
-                      url:   p.pageLabel || p.pageUrl,
-                      fullUrl: p.pageUrl,
-                      titleText: p.pageTitle || '',
-                      descText:  p.pageDesc  || '',
-                    }))
-                  : [{
-                      url: '/ (homepage)',
-                      fullUrl: '',
-                      titleText: title?.text || '',
-                      descText:  metaDescription?.text || '',
-                    }];
-
-                // Detect duplicates
-                const titleCounts = {};
-                const descCounts  = {};
-                rows.forEach(r => {
-                  if (r.titleText) titleCounts[r.titleText] = (titleCounts[r.titleText] || 0) + 1;
-                  if (r.descText)  descCounts[r.descText]   = (descCounts[r.descText]   || 0) + 1;
-                });
-
-                return rows.map((row, idx) => {
-                  const { url, fullUrl, titleText, descText } = row;
-                  const isDupTitle = titleText && titleCounts[titleText] > 1;
-                  const isDupDesc  = descText  && descCounts[descText]   > 1;
-                  const issues = [];
-                  if (!titleText) issues.push('No title');
-                  else if (titleText.length < 30 || titleText.length > 65) issues.push('Title length');
-                  if (isDupTitle) issues.push('Dup title');
-                  if (!descText)  issues.push('No desc');
-                  else if (descText.length < 120 || descText.length > 160) issues.push('Desc length');
-                  if (isDupDesc)  issues.push('Dup desc');
-                  const status = issues.length === 0 ? 'ok' : issues.some(i => i.startsWith('No ')) ? 'poor' : 'warning';
-                  return (
-                    <tr key={idx} className="border-b border-slate-800/40 hover:bg-slate-800/10 transition-all">
-                      <td className="py-2.5 px-3 font-mono text-indigo-400 text-[10px] max-w-[140px] truncate" title={fullUrl || url}>
-                        {url}
-                      </td>
-                      <td className="py-2.5 px-3 max-w-[160px]">
-                        <p className={`text-[10px] truncate ${isDupTitle ? 'text-amber-300' : 'text-slate-300'}`} title={titleText}>
-                          {titleText || <span className="text-rose-400 italic">Missing</span>}
-                        </p>
-                        {isDupTitle && <span className="text-[8px] text-amber-400 font-bold">DUPLICATE</span>}
-                      </td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className={`font-bold text-[10px] ${titleText.length >= 30 && titleText.length <= 65 ? 'text-emerald-400' : titleText.length > 0 ? 'text-amber-400' : 'text-rose-400'}`}>
-                          {titleText.length}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 max-w-[180px]">
-                        <p className={`text-[10px] truncate ${isDupDesc ? 'text-amber-300' : 'text-slate-400'}`} title={descText}>
-                          {descText || <span className="text-rose-400 italic">Missing</span>}
-                        </p>
-                        {isDupDesc && <span className="text-[8px] text-amber-400 font-bold">DUPLICATE</span>}
-                      </td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span className={`font-bold text-[10px] ${descText.length >= 120 && descText.length <= 160 ? 'text-emerald-400' : descText.length > 0 ? 'text-amber-400' : 'text-rose-400'}`}>
-                          {descText.length}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black border whitespace-nowrap ${
-                          status === 'ok'   ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                          status === 'poor' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
-                                              'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                        }`}>
-                          {status === 'ok' ? '✓ GOOD' : issues.slice(0, 2).join(', ')}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                });
-              })()}
-            </tbody>
-          </table>
-        </div>
+        <PageSeoTableInline
+          crawlData={crawlData}
+          title={title}
+          metaDescription={metaDescription}
+          headings={headings}
+          imageAnalysis={imageAnalysis}
+          links={links}
+          onAltClick={() => setShowAltPanel(true)}
+          openWarning={openWarning}
+        />
         {(!crawlData || !crawlData.siteWideImages?.perPage?.length) && (
-          <p className="text-[9px] text-slate-500 italic mt-3">
-            * Showing homepage data only. Click <strong>Run Scan</strong> then wait for the deep crawl to complete to see all pages.
+          <p className="text-[10px] text-slate-500 italic mt-3">
+            * Showing homepage data only. Run Scan then wait for deep crawl to see all pages.
           </p>
         )}
       </div>
 
-      {/* ── SEO Warning Engine ────────────────────────────────────────────── */}
+
       {(() => {
         const crawlPages = crawlData?.siteWideImages?.perPage || [];
         const rows = crawlPages.length > 0
@@ -956,6 +1181,30 @@ export default function SeoDashboard({ seoData, crawlData = null }) {
           </div>
         );
       })()}
+
+      {/* ── Modals ─────────────────────────────────────────────────────────── */}
+      {showAltPanel && (
+        <MissingAltPanel
+          items={
+            (crawlData?.siteWideImages?.missingAltImages?.length
+              ? crawlData.siteWideImages.missingAltImages
+              : imageAnalysis?.missingAltSrcs || [])
+          }
+          onClose={() => setShowAltPanel(false)}
+        />
+      )}
+      {showBrokenPanel && (
+        <BrokenLinksPanel
+          links={links?.brokenLinks || []}
+          onClose={() => setShowBrokenPanel(false)}
+        />
+      )}
+      {activeWarning && (
+        <SeoWarningPanel
+          warning={activeWarning}
+          onClose={() => setActiveWarning(null)}
+        />
+      )}
 
     </div>
   );

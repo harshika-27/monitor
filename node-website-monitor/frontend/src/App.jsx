@@ -344,8 +344,8 @@ export default function App() {
           </div>
         )}
 
-        {/* Audit Target Status Header */}
-        {stats && (
+        {/* Audit Target Status Header — hidden in Admin mode */}
+        {stats && activeTab !== 'admin' && (
           <div className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 glass-card p-6 rounded-2xl animate-fade-in-up">
             <div>
               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest block mb-1">AUDIT TARGET SOURCE</span>
@@ -369,41 +369,57 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab Module Switcher */}
-        <div className="flex flex-wrap border-b border-slate-800/80 mb-6 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
-          {[
-            { id: 'uptime',        label: 'Uptime & Logs' },
-            { id: 'wordpress',     label: 'WordPress CMS' },
-            { id: 'ssl',           label: 'SSL & Security' },
-            { id: 'seo',           label: 'SEO Optimization' },
-            { id: 'accessibility', label: 'Accessibility' },
-            { id: 'site_analysis', label: 'Site Analysis' },
-            { id: 'email_alerts',  label: 'Email Alerts' },
-            { id: 'admin',         label: 'Admin Dashboard' },
-            { id: 'settings',      label: 'Gmail & Alerts' },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-5 py-3.5 font-bold text-sm uppercase tracking-wide border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'border-indigo-500 text-indigo-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        {/* Tab Module Switcher — hidden in Admin Dashboard full-page mode */}
+        {activeTab !== 'admin' && (
+          <div className="flex flex-wrap border-b border-slate-800/80 mb-6 animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+            {[
+              { id: 'uptime',        label: 'Uptime & Logs' },
+              { id: 'wordpress',     label: 'WordPress CMS' },
+              { id: 'ssl',           label: 'SSL & Security' },
+              { id: 'seo',           label: 'SEO Optimization' },
+              { id: 'accessibility', label: 'Accessibility' },
+              { id: 'site_analysis', label: 'Site Analysis' },
+              { id: 'email_alerts',  label: 'Email Alerts' },
+              { id: 'admin',         label: 'Admin Dashboard' },
+              { id: 'settings',      label: 'Gmail & Alerts' },
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-5 py-3.5 font-bold text-sm uppercase tracking-wide border-b-2 transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'border-indigo-500 text-indigo-400'
+                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
 
-        {/* Dynamic tabs render panel */}
-        {activeTab === 'settings' ? (
+        {/* Admin Dashboard full-page — has its own back button */}
+        {activeTab === 'admin' && (
+          <div className="space-y-6">
+            <div className="flex items-center gap-3 mb-2">
+              <button
+                onClick={() => setActiveTab('uptime')}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/60 hover:bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-200 cursor-pointer transition-all"
+              >
+                ← Back to Dashboard
+              </button>
+              <span className="text-slate-500 text-xs">You are viewing the Admin Dashboard</span>
+            </div>
+            <AdminDashboard />
+          </div>
+        )}
+
+        {/* Dynamic tabs render panel — skipped when Admin is active (handled above) */}
+        {activeTab !== 'admin' && activeTab === 'settings' ? (
           <SettingsPanel showToast={showToast} />
-        ) : activeTab === 'admin' ? (
-          <AdminDashboard />
-        ) : activeTab === 'email_alerts' ? (
+        ) : activeTab !== 'admin' && activeTab === 'email_alerts' ? (
           <EmailAlertSettings siteUrl={stats?.url || url} showToast={showToast} />
-        ) : loading && !stats ? (
+        ) : activeTab !== 'admin' && loading && !stats ? (
           <div className="py-24 text-center animate-fade-in-up">
             <RefreshCw className="h-8 w-8 text-indigo-500 rotate-infinite mx-auto mb-4" />
             <h4 className="font-extrabold text-slate-300">Synchronizing SRE monitoring telemetry...</h4>
